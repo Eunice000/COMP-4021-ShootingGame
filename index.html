@@ -1,33 +1,45 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-<title>Page Title</title>
- <link rel="stylesheet" href="css/login.css">
+    <title>Page Title</title>
+    <link rel="stylesheet" href="css/start_game.css">
 </head>
+
 <body>
-<audio id="BackgroundMusic" src="/music/start_game_bgm.mp3"></audio>
-<!-- login  -->
-<div class="login-container">
+    <audio id="BackgroundMusic" src="/music/start_game_bgm.mp3"></audio>
+    <!-- start game  -->
+    <p style="background-image: url('/image/start_background.gif');"></p>
+    <div class="start-game" id="start-game" tabindex="0" role="button" aria-label="Start game">
+        <img id="startBtn" src="image/start_button.png" alt="start" height="200">
+        <p class="start-caption">start</p>
+    </div>
+    <!-- login  -->
+    <div class="login-container">
         <h1>LOGIN</h1>
-        
+
         <div class="input-group">
             <label for="name">Name</label>
             <input type="text" id="name" placeholder="enter your name">
         </div>
-        
+
         <div class="input-group">
             <label for="password">PASSWORD</label>
             <input type="password" id="password" placeholder="••••••••">
         </div>
-        
+
         <button type="submit">SIGN IN</button>
-        
+
         <div class="divider">OR</div>
 
-        
+
         <div class="footer">
             Don't have an account? <a href="#">Register</a>
         </div>
     </div>
+    <script src="js/start_game.js"></script>
+    <script>
+    </script>
 </body>
+
 </html>

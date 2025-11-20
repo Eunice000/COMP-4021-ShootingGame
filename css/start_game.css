@@ -13,12 +13,74 @@
 }
 
 body {
+  /* page background: gif used as the site background with a color fallback */
   background-color: var(--secondary);
+  background-image: url("../image/start_background.gif");
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
+  /* ensure text/background contrast if gif has bright/dark areas */
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
   min-height: 100vh;
   padding: 20px;
+}
+
+
+/* Start game area */
+.start-game {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.start-game img {
+  transition: transform 200ms ease, filter 200ms ease;
+  display: block;
+}
+
+.start-game img:hover,
+.start-game img:focus {
+  transform: scale(1.06);
+  filter: brightness(1.05);
+}
+
+.start-caption {
+  color: whitesmoke;
+  font-weight: bold;
+  font-size: 50px;
+  text-align: center;
+}
+
+/* Hide login until start clicked */
+.login-hidden {
+  display: none;
+}
+
+.login-visible {
+  display: block; /* shown */
+  animation: fadeInUp 260ms ease both;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* fade-out for start area */
+.start-game.start-hidden {
+  animation: fadeOut 220ms ease both;
+  pointer-events: none;
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(-6px) scale(.98); }
 }
 
 .login-container {
