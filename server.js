@@ -5,7 +5,7 @@ const bcrypt = require('bcrypt');
 const bodyParser = require('body-parser');
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 const DATA_FILE = path.join(__dirname, 'data', 'user.json');
 const ROOMS_FILE = path.join(__dirname, 'data', 'rooms.json');
 
