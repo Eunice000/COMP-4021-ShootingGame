@@ -1,0 +1,28 @@
+{
+  "rooms": [
+    {
+      "id": "262436",
+      "host": "yo",
+      "players": [
+        "yo"
+      ],
+      "createdAt": "2025-11-20T14:17:30.573Z"
+    },
+    {
+      "id": "538675",
+      "host": "hihi",
+      "players": [
+        "hihi"
+      ],
+      "createdAt": "2025-11-20T14:21:33.857Z"
+    },
+    {
+      "id": "702132",
+      "host": "yo",
+      "players": [
+        "yo"
+      ],
+      "createdAt": "2025-11-20T14:23:36.167Z"
+    }
+  ]
+}

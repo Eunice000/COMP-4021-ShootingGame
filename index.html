@@ -12,10 +12,30 @@
     <p style="background-image: url('/image/start_background.gif');"></p>
     <div class="start-game" id="start-game" tabindex="0" role="button" aria-label="Start game">
         <img id="startBtn" src="image/start_button.png" alt="start" height="200">
-        <p class="start-caption">start</p>
+        <p class="start-caption">Click to Start</p>
+    </div>
+    <!-- player pair-up panel (hidden until login) -->
+    <div class="pairup-container login-hidden" id="pairupContainer">
+        <h1>Player Pair Up</h1>
+        <div class="pairup-actions">
+            <div>
+                <button id="createRoomBtn" class="small-btn">Create Room</button>
+                <div id="createdRoom" class="created-room" aria-live="polite"></div>
+            </div>
+
+            <div>
+                <input type="text" id="findRoomInput" placeholder="Enter room number">
+                <button id="findRoomBtn" class="small-btn">Find Room</button>
+                <div id="foundRoom" class="found-room" aria-live="polite"></div>
+            </div>
+        </div>
+        <div style="margin-top:12px; display:flex; gap:8px;">
+            <button id="backToLoginBtn" class="small-btn">LOGOUT</button>
+        </div>
     </div>
     <!-- login  -->
     <div class="login-container">
+        <button id="closeRegisterBtn" class="close-login-btn" aria-label="Back to Login">×</button>
         <h1>LOGIN</h1>
 
         <div class="input-group">
@@ -25,7 +45,7 @@
 
         <div class="input-group">
             <label for="password">PASSWORD</label>
-            <input type="password" id="password" placeholder="••••••••">
+            <input type="password" id="password" placeholder="password">
         </div>
 
         <button type="submit">SIGN IN</button>
@@ -34,11 +54,52 @@
 
 
         <div class="footer">
-            Don't have an account? <a href="#">Register</a>
+            Don't have an account? <a href="#" id="registerLink">Register</a>
         </div>
     </div>
     <script src="js/start_game.js"></script>
+    <script src="js/auth.js"></script>
+    <!-- top-right alert trigger and centered alert -->
+    <button id="topRightBtn" class="top-right-btn" aria-label="Show alert">?</button>
+
+    <div id="centerAlert" class="center-alert" role="dialog" aria-modal="true" aria-hidden="true">
+        <div class="center-alert-inner">
+            <div class="center-alert-message">Game description and instructions</div>
+            <button id="centerAlertClose" class="center-alert-close" aria-label="Close">×</button>
+        </div>
+    </div>
+
     <script>
+    (function(){
+        const topBtn = document.getElementById('topRightBtn');
+        const alertBox = document.getElementById('centerAlert');
+        const alertClose = document.getElementById('centerAlertClose');
+        if (!topBtn || !alertBox) return;
+
+        function toggleAlert(){
+            const isVisible = alertBox.classList.contains('visible');
+            if (isVisible) {
+                alertBox.classList.remove('visible');
+                alertBox.setAttribute('aria-hidden','true');
+                topBtn.focus();
+            } else {
+                alertBox.classList.add('visible');
+                alertBox.setAttribute('aria-hidden','false');
+                const focusable = alertBox.querySelector('button');
+                if (focusable) focusable.focus();
+            }
+        }
+
+        topBtn.addEventListener('click', toggleAlert);
+        alertClose && alertClose.addEventListener('click', function(){
+            alertBox.classList.remove('visible');
+            alertBox.setAttribute('aria-hidden','true');
+            topBtn.focus();
+        });
+        document.addEventListener('keydown', (e)=>{
+            if (e.key === 'Escape' && alertBox.classList.contains('visible')) hideAlert();
+        });
+    })();
     </script>
 </body>
 
