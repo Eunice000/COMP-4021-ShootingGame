@@ -331,6 +331,11 @@ button:hover {
   opacity: 1;
 }
 .center-alert-message{ font-size: 18px; color: var(--primary); font-weight:700 }
+.center-alert-message{ text-align: left; line-height: 1.45; font-weight: 600; }
+.center-alert-message p.muted{ margin: 6px 0 8px; color: #333; font-weight:500 }
+.center-alert-message ul{ margin: 6px 0 0 18px; padding: 0; }
+.center-alert-message li{ margin: 6px 0; font-size: 15px; font-weight:500 }
+.center-alert-message kbd{ background:#eee; border:1px solid #ccc; padding:2px 6px; border-radius:4px; font-family:inherit }
 .center-alert-close{
   background: var(--accent);
   color: var(--secondary);
