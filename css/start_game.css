@@ -310,19 +310,20 @@ button:hover {
   z-index: 9999; /* ensure it sits above the login form */
 }
 .center-alert-inner{
-  min-width: 220px;
-  max-width: 360px;
+  min-width: 260px;
+  max-width: 460px;
   background: rgba(255,255,255,0.98);
   border: 2px solid var(--primary);
-  padding: 12px 14px;
+  padding: 14px 16px;
   border-radius: 12px;
   box-shadow: 0 12px 40px rgba(0,0,0,0.25);
   transform: translateX(-6px) scale(.99);
   opacity: 0;
   transition: all 180ms ease;
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
   pointer-events: auto;
 }
 .center-alert.visible { pointer-events: auto; }
@@ -330,7 +331,12 @@ button:hover {
   transform: translateX(0) scale(1);
   opacity: 1;
 }
-.center-alert-message{ font-size: 18px; color: var(--primary); font-weight:700 }
+.center-alert-message{ font-size: 16px; color: var(--primary); font-weight:600; text-align:left; line-height:1.45 }
+.center-alert-message strong { display:block; font-size:17px; margin-bottom:6px }
+.center-alert-message p.muted{ margin:0 0 8px 0; color:#333; font-weight:500 }
+.center-alert-message ul{ margin:0 0 0 18px; padding:0 }
+.center-alert-message li{ margin:6px 0; font-size:15px }
+.center-alert-message kbd{ background:#f3f4f6; border:1px solid #d6d8db; padding:2px 6px; border-radius:4px; font-family:inherit }
 .center-alert-close{
   background: var(--accent);
   color: var(--secondary);
@@ -338,4 +344,11 @@ button:hover {
   font-size: 18px;
   width: 34px; height: 34px; border-radius: 50%;
   cursor: pointer;
+  align-self: flex-end;
+}
+
+/* Responsive tweaks */
+@media (max-width: 480px) {
+  .center-alert-inner { max-width: calc(100vw - 32px); padding: 12px; }
+  .center-alert-message { font-size: 15px }
 }
