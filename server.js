@@ -19,13 +19,19 @@ async function readUsers(){
     const obj = JSON.parse(txt);
     return obj.users || [];
   } catch(e){
+    console.error('readUsers error:', e);
     return [];
   }
 }
 async function writeUsers(users){
-  const dir = path.dirname(DATA_FILE);
-  await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(DATA_FILE, JSON.stringify({ users }, null, 2), 'utf8');
+  try {
+    const dir = path.dirname(DATA_FILE);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(DATA_FILE, JSON.stringify({ users }, null, 2), 'utf8');
+  } catch (e) {
+    console.error('writeUsers error:', e);
+    throw e;
+  }
 }
 
 app.post('/api/register', async (req, res) => {
@@ -58,13 +64,19 @@ async function readRooms(){
     const obj = JSON.parse(txt);
     return obj.rooms || [];
   } catch(e){
+    console.error('readRooms error:', e);
     return [];
   }
 }
 async function writeRooms(rooms){
-  const dir = path.dirname(ROOMS_FILE);
-  await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(ROOMS_FILE, JSON.stringify({ rooms }, null, 2), 'utf8');
+  try {
+    const dir = path.dirname(ROOMS_FILE);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(ROOMS_FILE, JSON.stringify({ rooms }, null, 2), 'utf8');
+  } catch (e) {
+    console.error('writeRooms error:', e);
+    throw e;
+  }
 }
 
 function generateRoomId(existing){
@@ -111,4 +123,13 @@ app.post('/api/rooms/:id/join', async (req, res) => {
   res.json({ ok: true, room });
 });
 
-app.listen(PORT, ()=> console.log(`Auth server running on http://localhost:${PORT}`));
+// Global error handlers for better visibility
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception thrown:', err);
+});
+
+const server = app.listen(PORT, ()=> console.log(`Auth server running on http://localhost:${PORT}`));
+server.on('error', (err) => console.error('Server error:', err));
