@@ -66,6 +66,6 @@ window.GameConfig = {
         // width and height follow the canvas width and height above
         outOfBoundsMargin: 400,
         // Desired map id to load from assets/game/maps.json (overrides ContentConfig.maps.stage.id when set)
-        mapId: 'testing'
+        mapId: 'map1'
     }
 };
