@@ -197,9 +197,9 @@ Stage.prototype.update = function (dt) {
         // Movement intents
         pl.applyInput(intents);
 
-        // CHEAT: grant knockback immunity and special gun on cheat button press
+        // CHEAT: toggle on/off on cheat button press
         if (intents.cheatPressed) {
-            this._applyCheat(i);
+            this._toggleCheat(i);
         }
 
         // Integrate with gravity
@@ -384,6 +384,18 @@ Stage.prototype._applyBulletHit = function (hit) {
     }
 };
 
+// CHEAT: toggle/enable/disable helpers
+Stage.prototype._toggleCheat = function (playerIndex) {
+    const pl = this.players[playerIndex];
+    if (!pl) return;
+    const isCheat = !!(pl._cheatActive || (pl.gun && pl.gun.type === 'cheat'));
+    if (isCheat) {
+        this._removeCheat(playerIndex);
+    } else {
+        this._applyCheat(playerIndex);
+    }
+};
+
 // CHEAT: apply infinite knockback immunity and special overpowered gun for the given player index
 Stage.prototype._applyCheat = function (playerIndex) {
     const pl = this.players[playerIndex];
@@ -401,6 +413,33 @@ Stage.prototype._applyCheat = function (playerIndex) {
         cooldownMs: 100,
         ammo: 999
     });
+    // Mark cheat as active for reliable toggling
+    pl._cheatActive = true;
+};
+
+// CHEAT: remove cheat effects and restore default pistol
+Stage.prototype._removeCheat = function (playerIndex) {
+    const pl = this.players[playerIndex];
+    if (!pl) return;
+    // Remove shield immediately
+    pl.shieldMs = 0;
+    // Restore default pistol (fresh)
+    if (window.Weapons && Weapons.newGun) {
+        pl.gun = Weapons.newGun((Weapons.getDefaultId && Weapons.getDefaultId()) || 1);
+    } else {
+        pl.gun = new window.Gun({
+            id: 1,
+            name: 'pistol',
+            type: 'pistol',
+            color: '#333333',
+            power: 900,
+            recoil: 150,
+            cooldownMs: 300,
+            ammo: 12
+        });
+    }
+    // Unmark cheat
+    pl._cheatActive = false;
 };
 
 /**
