@@ -3,11 +3,33 @@ const path = require('path');
 const fs = require('fs').promises;
 const bcrypt = require('bcrypt');
 const bodyParser = require('body-parser');
+const http = require('http');
+const { Server } = require('socket.io');
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 const DATA_FILE = path.join(__dirname, 'data', 'user.json');
 const ROOMS_FILE = path.join(__dirname, 'data', 'rooms.json');
+
+// Enable CORS for all routes
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
+});
 
 app.use(bodyParser.json());
 // serve static site files so front-end can run from same origin
@@ -111,4 +133,117 @@ app.post('/api/rooms/:id/join', async (req, res) => {
   res.json({ ok: true, room });
 });
 
-app.listen(PORT, ()=> console.log(`Auth server running on http://localhost:${PORT}`));
+// Store active game rooms in memory (in addition to file storage)
+const activeRooms = new Map(); // roomId -> { players: Set of socketIds, gameState: {...} }
+
+// WebSocket connection handling
+io.on('connection', (socket) => {
+  console.log('User connected:', socket.id);
+
+  // Join a room
+  socket.on('join-room', async ({ roomId, playerName }) => {
+    try {
+      const rooms = await readRooms();
+      const room = rooms.find(r => r.id === roomId);
+      
+      if (!room) {
+        socket.emit('error', { message: 'Room not found' });
+        return;
+      }
+
+      // Add player to room if not already there
+      if (!room.players.includes(playerName)) {
+        room.players.push(playerName);
+        await writeRooms(rooms);
+      }
+
+      socket.join(roomId);
+      socket.roomId = roomId;
+      socket.playerName = playerName;
+
+      // Initialize room in memory if needed
+      if (!activeRooms.has(roomId)) {
+        activeRooms.set(roomId, {
+          players: new Set(),
+          gameState: null,
+          readyPlayers: new Set()
+        });
+      }
+
+      const roomData = activeRooms.get(roomId);
+      roomData.players.add(socket.id);
+
+      // Notify all players in room
+      io.to(roomId).emit('player-joined', {
+        playerName,
+        players: Array.from(roomData.players).map(id => {
+          const s = io.sockets.sockets.get(id);
+          return s ? s.playerName : null;
+        }).filter(Boolean)
+      });
+
+      // If 2 players, notify that game can start
+      if (roomData.players.size === 2) {
+        io.to(roomId).emit('room-ready', { roomId });
+      }
+    } catch (error) {
+      socket.emit('error', { message: error.message });
+    }
+  });
+
+  // Player ready to start game
+  socket.on('player-ready', ({ roomId }) => {
+    const roomData = activeRooms.get(roomId);
+    if (roomData) {
+      roomData.readyPlayers.add(socket.id);
+      
+      // If both players ready, start game
+      if (roomData.readyPlayers.size === 2) {
+        io.to(roomId).emit('game-start', { roomId });
+      }
+    }
+  });
+
+  // Game state updates (player movement, shooting, etc.)
+  socket.on('game-update', ({ roomId, gameState }) => {
+    // Broadcast to other players in room
+    socket.to(roomId).emit('game-state', gameState);
+  });
+
+  // Player input (movement, shooting)
+  socket.on('player-input', ({ roomId, input }) => {
+    // Broadcast input to other players
+    socket.to(roomId).emit('player-input-received', {
+      playerName: socket.playerName,
+      input
+    });
+  });
+
+  // Disconnect handling
+  socket.on('disconnect', () => {
+    if (socket.roomId) {
+      const roomData = activeRooms.get(socket.roomId);
+      if (roomData) {
+        roomData.players.delete(socket.id);
+        roomData.readyPlayers.delete(socket.id);
+        
+        // Notify other players
+        socket.to(socket.roomId).emit('player-left', {
+          playerName: socket.playerName
+        });
+
+        // Clean up empty rooms
+        if (roomData.players.size === 0) {
+          activeRooms.delete(socket.roomId);
+        }
+      }
+    }
+    console.log('User disconnected:', socket.id);
+  });
+});
+
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Server accessible from network at http://<YOUR_IP>:${PORT}`);
+  console.log(`To find your IP: Windows: ipconfig | Mac/Linux: ifconfig`);
+});

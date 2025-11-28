@@ -11,7 +11,22 @@
   const footer = loginContainer ? loginContainer.querySelector('.footer') : null;
   const closeBtn = document.getElementById('closeRegisterBtn');
 
-  const API_BASE = window.location.origin;
+  // Detect if accessing from wrong port or file:// protocol and suggest correct one
+  const currentPort = window.location.port;
+  const isFileProtocol = window.location.protocol === 'file:';
+  
+  // If using file:// protocol or wrong port, default to localhost:3000
+  let API_BASE;
+  if (isFileProtocol) {
+    API_BASE = 'http://localhost:3000';
+    console.warn('You are opening the file directly. Please access via http://localhost:3000 after starting the server.');
+  } else if (currentPort && currentPort !== '3000' && currentPort !== '') {
+    API_BASE = window.location.protocol + '//' + window.location.hostname + ':3000';
+    console.warn('You are accessing the page from port ' + currentPort + '. For best results, access via http://localhost:3000');
+  } else {
+    API_BASE = window.location.origin;
+  }
+  
   let mode = 'login'; // or 'register'
   let currentUser = null;
 
@@ -38,7 +53,23 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, password })
       });
-      const data = await res.json();
+      
+      // Check if response has content
+      const text = await res.text();
+      if (!text) {
+        showMessage('Server returned empty response. Is the server running on ' + API_BASE + '?');
+        return;
+      }
+      
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        showMessage('Server returned invalid response. Make sure the server is running on port 3000.');
+        console.error('Response was:', text);
+        return;
+      }
+      
       if (res.ok) {
         showMessage('Registered successfully. You can now sign in.');
         setMode('login');
@@ -46,7 +77,11 @@
         showMessage(data.error || 'Registration failed');
       }
     } catch(err){
-      showMessage('Unable to register: ' + err.message);
+      if (err.message.includes('fetch')) {
+        showMessage('Unable to connect to server. Make sure the server is running on ' + API_BASE);
+      } else {
+        showMessage('Unable to register: ' + err.message);
+      }
     }
   }
 
@@ -60,7 +95,23 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, password })
       });
-      const data = await res.json();
+      
+      // Check if response has content
+      const text = await res.text();
+      if (!text) {
+        showMessage('Server returned empty response. Is the server running on ' + API_BASE + '?');
+        return;
+      }
+      
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        showMessage('Server returned invalid response. Make sure the server is running on port 3000.');
+        console.error('Response was:', text);
+        return;
+      }
+      
       if (res.ok && data.ok) {
         showMessage('Welcome, ' + data.name + '!');
         currentUser = data.name;
@@ -79,7 +130,11 @@
         showMessage(data.error || 'Login failed');
       }
     } catch(err){
-      showMessage('Unable to login: ' + err.message);
+      if (err.message.includes('fetch')) {
+        showMessage('Unable to connect to server. Make sure the server is running on ' + API_BASE);
+      } else {
+        showMessage('Unable to login: ' + err.message);
+      }
     }
   }
 
@@ -108,8 +163,98 @@
   const createdRoom = document.getElementById('createdRoom');
   const foundRoom = document.getElementById('foundRoom');
   const backToLoginBtn = document.getElementById('backToLoginBtn');
-  // server-backed rooms
 
+  // WebSocket variables
+  let socket = null;
+  let currentRoomId = null;
+
+  // Initialize socket connection
+  function initSocket() {
+    if (socket && socket.connected) return socket;
+    
+    // Always connect to the same origin that served the page
+    // This ensures Socket.IO connects correctly whether accessed via localhost or IP address
+    // Socket.IO will automatically use the correct protocol and host
+    socket = io();
+    
+    socket.on('connect', () => {
+      console.log('Connected to server');
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Disconnected from server');
+    });
+
+    socket.on('player-joined', (data) => {
+      console.log('Player joined:', data);
+      if (foundRoom) {
+        foundRoom.textContent = `Room: ${currentRoomId} - Players: ${data.players.join(', ')}`;
+      }
+      if (createdRoom) {
+        createdRoom.textContent = `Room: ${currentRoomId} - Players: ${data.players.join(', ')}`;
+      }
+    });
+
+    socket.on('room-ready', (data) => {
+      console.log('Room ready!', data);
+      showMessage('Both players connected! Ready to start game.');
+    });
+
+    socket.on('game-start', (data) => {
+      console.log('Game starting!', data);
+      if (window.startGame) {
+        window.startGame();
+      } else {
+        showMessage('Game starting! (Game code not yet implemented)');
+      }
+    });
+
+    socket.on('player-input-received', (data) => {
+      if (window.handleOpponentInput) {
+        window.handleOpponentInput(data);
+      }
+    });
+
+    socket.on('game-state', (gameState) => {
+      if (window.updateGameFromState) {
+        window.updateGameFromState(gameState);
+      }
+    });
+
+    socket.on('player-left', (data) => {
+      showMessage(`Player ${data.playerName} left the game`);
+      if (foundRoom) foundRoom.textContent = `Player ${data.playerName} left`;
+      if (createdRoom) createdRoom.textContent = `Player ${data.playerName} left`;
+    });
+
+    socket.on('error', (error) => {
+      showMessage('Error: ' + error.message);
+    });
+  }
+
+  // Make socket and roomId available globally for game code
+  window.gameSocket = () => socket;
+  window.currentRoomId = () => currentRoomId;
+  window.sendPlayerInput = (inputType, value) => {
+    if (socket && currentRoomId) {
+      socket.emit('player-input', {
+        roomId: currentRoomId,
+        input: {
+          type: inputType,
+          value: value,
+          timestamp: Date.now()
+        }
+      });
+    }
+  };
+  window.sendPlayerReady = () => {
+    if (socket && currentRoomId) {
+      socket.emit('player-ready', { roomId: currentRoomId });
+    }
+  };
+
+  // server-backed rooms
+  
   if (createRoomBtn) {
     createRoomBtn.addEventListener('click', async function(){
       const hostName = currentUser || (nameInput && nameInput.value.trim()) || 'anonymous';
@@ -121,7 +266,19 @@
         });
         const data = await res.json();
         if (res.ok && data.ok) {
+          currentRoomId = data.room.id;
           if (createdRoom) createdRoom.textContent = 'Room created: ' + data.room.id;
+          
+          // Initialize socket and join room
+          initSocket();
+          // Wait for socket to connect, then join room
+          if (socket.connected) {
+            socket.emit('join-room', { roomId: data.room.id, playerName: hostName });
+          } else {
+            socket.once('connect', () => {
+              socket.emit('join-room', { roomId: data.room.id, playerName: hostName });
+            });
+          }
         } else {
           showMessage(data.error || 'Failed to create room');
         }
@@ -140,7 +297,33 @@
         if (res.ok) {
           const data = await res.json();
           if (data.ok && data.room) {
-            if (foundRoom) foundRoom.textContent = 'Room found: ' + data.room.id + ' (players: ' + (data.room.players||[]).join(', ') + ')';
+            currentRoomId = data.room.id;
+            const playerName = currentUser || (nameInput && nameInput.value.trim()) || 'anonymous';
+            
+            // Join room via API
+            const joinRes = await fetch(API_BASE + '/api/rooms/' + want + '/join', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: playerName })
+            });
+            
+            if (joinRes.ok) {
+              if (foundRoom) foundRoom.textContent = 'Room found: ' + data.room.id;
+              
+              // Initialize socket and join room
+              initSocket();
+              // Wait for socket to connect, then join room
+              if (socket.connected) {
+                socket.emit('join-room', { roomId: data.room.id, playerName });
+              } else {
+                socket.once('connect', () => {
+                  socket.emit('join-room', { roomId: data.room.id, playerName });
+                });
+              }
+            } else {
+              const joinData = await joinRes.json();
+              showMessage(joinData.error || 'Failed to join room');
+            }
           } else {
             if (foundRoom) foundRoom.textContent = 'Room not found';
           }
@@ -168,6 +351,12 @@
         login.classList.remove('login-hidden');
         login.classList.add('login-visible');
       }
+      // Disconnect socket
+      if (socket) {
+        socket.disconnect();
+        socket = null;
+      }
+      currentRoomId = null;
     });
   }
 
