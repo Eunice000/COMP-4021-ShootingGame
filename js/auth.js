@@ -163,6 +163,7 @@
   const createdRoom = document.getElementById('createdRoom');
   const foundRoom = document.getElementById('foundRoom');
   const backToLoginBtn = document.getElementById('backToLoginBtn');
+  const startGameBtn = document.getElementById('startGameBtn');
 
   // WebSocket variables
   let socket = null;
@@ -193,15 +194,29 @@
       if (createdRoom) {
         createdRoom.textContent = `Room: ${currentRoomId} - Players: ${data.players.join(', ')}`;
       }
+      // Hide start game button if not enough players
+      if (startGameBtn && data.players.length < 2) {
+        startGameBtn.style.display = 'none';
+        startGameBtn.disabled = false;
+        startGameBtn.textContent = 'Start Game';
+      }
     });
 
     socket.on('room-ready', (data) => {
       console.log('Room ready!', data);
       showMessage('Both players connected! Ready to start game.');
+      // Show start game button when room is ready
+      if (startGameBtn) {
+        startGameBtn.style.display = 'block';
+      }
     });
 
     socket.on('game-start', (data) => {
       console.log('Game starting!', data);
+      // Hide start game button when game starts
+      if (startGameBtn) {
+        startGameBtn.style.display = 'none';
+      }
       if (window.startGame) {
         window.startGame();
       } else {
@@ -225,6 +240,12 @@
       showMessage(`Player ${data.playerName} left the game`);
       if (foundRoom) foundRoom.textContent = `Player ${data.playerName} left`;
       if (createdRoom) createdRoom.textContent = `Player ${data.playerName} left`;
+      // Hide start game button when a player leaves
+      if (startGameBtn) {
+        startGameBtn.style.display = 'none';
+        startGameBtn.disabled = false;
+        startGameBtn.textContent = 'Start Game';
+      }
     });
 
     socket.on('error', (error) => {
@@ -339,6 +360,22 @@
     });
   }
 
+  if (startGameBtn) {
+    startGameBtn.addEventListener('click', function(){
+      if (socket && currentRoomId) {
+        // Send ready signal to start the game
+        if (window.sendPlayerReady) {
+          window.sendPlayerReady();
+        } else {
+          socket.emit('player-ready', { roomId: currentRoomId });
+        }
+        // Disable button to prevent multiple clicks
+        startGameBtn.disabled = true;
+        startGameBtn.textContent = 'Starting...';
+      }
+    });
+  }
+
   if (backToLoginBtn) {
     backToLoginBtn.addEventListener('click', function(){
       const pairup = document.getElementById('pairupContainer');
@@ -350,6 +387,12 @@
       if (login) {
         login.classList.remove('login-hidden');
         login.classList.add('login-visible');
+      }
+      // Hide start game button
+      if (startGameBtn) {
+        startGameBtn.style.display = 'none';
+        startGameBtn.disabled = false;
+        startGameBtn.textContent = 'Start Game';
       }
       // Disconnect socket
       if (socket) {

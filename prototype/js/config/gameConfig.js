@@ -12,24 +12,25 @@ window.GameConfig = {
         air: 0.85
     },
     // Round timer length in seconds
-    roundTimer: 180,
+    roundTimer: 180, // 3 minutes like Gun Mayhem 2
     player: {
         width: 80,
         height: 120,
-        moveAccel: 5000, // px/s^2 horizontal acceleration from input
-        maxSpeedX: 400, // px/s horizontal top speed from input (external impulses may exceed)
-        jumpSpeed: 700, // px/s (applied as an instantaneous vertical impulse)
+        moveAccel: 6000, // Increased for more responsive movement like Gun Mayhem 2
+        maxSpeedX: 450, // Slightly faster movement
+        jumpSpeed: 750, // Higher jump for better platforming
         maxLives: 3,
-        maxAirJumps: 1
+        maxAirJumps: 1 // Double jump like Gun Mayhem 2
     },
     projectile: {
-        speed: 1500,
-        lifetimeMs: 1500,
+        speed: 1800, // Faster bullets for more action
+        lifetimeMs: 2000, // Longer range
         width: 24,
         height: 8,
-        knockbackX: 900,    // default horizontal impulse on hit (px/s)
-        knockbackY: -200,   // default vertical impulse on hit (px/s)
-        recoilX: 150        // default shooter recoil opposite direction (px/s)
+        knockbackX: 1200,    // Increased knockback for more dramatic launches (Gun Mayhem 2 style)
+        knockbackY: -300,   // More upward knockback to send players flying
+        recoilX: 200,       // More recoil for weapon feel
+        knockbackDurationMs: 200 // Slightly longer stun for impact feel
     },
     guns: {
         // Additional weapon-related config
@@ -41,18 +42,18 @@ window.GameConfig = {
         width: 80,
         height: 80,
         offset: 20,         // spawn distance from the platform
-        // Power-up spawn schedules (seconds)
+        // Power-up spawn schedules (seconds) - More frequent like Gun Mayhem 2
         // get_gun: first spawn delay, interval between spawns, and time-to-live
         getGun: {
-            firstSpawnSec: 10,  // Delay after game start
-            intervalSec: 10,    // Interval between spawns
-            ttlSec: 9          // Time-to-live (after spawn, power-up disappears) // Please set to at least 1 second less than intervalSec
+            firstSpawnSec: 5,   // Faster first spawn for more action
+            intervalSec: 8,     // More frequent weapon crates
+            ttlSec: 7           // Time-to-live (after spawn, power-up disappears)
         },
         // other power-ups (extra_life, shield): shared schedule
         others: {
-            firstSpawnSec: 15,
-            intervalSec: 15,
-            ttlSec: 9
+            firstSpawnSec: 10,  // Faster spawn
+            intervalSec: 12,    // More frequent power-ups
+            ttlSec: 10          // Longer time to pick up
         }
     },
     colors: {

@@ -166,12 +166,26 @@ io.on('connection', (socket) => {
         activeRooms.set(roomId, {
           players: new Set(),
           gameState: null,
-          readyPlayers: new Set()
+          readyPlayers: new Set(),
+          playerAssignments: new Map() // socketId -> 'p1' or 'p2'
         });
       }
 
       const roomData = activeRooms.get(roomId);
       roomData.players.add(socket.id);
+      
+      // Assign player number based on join order
+      if (roomData.players.size === 1) {
+        roomData.playerAssignments.set(socket.id, 'p1');
+        socket.playerId = 'p1';
+      } else if (roomData.players.size === 2) {
+        // Second player is p2
+        const firstPlayerId = Array.from(roomData.players)[0];
+        if (firstPlayerId !== socket.id) {
+          roomData.playerAssignments.set(socket.id, 'p2');
+          socket.playerId = 'p2';
+        }
+      }
 
       // Notify all players in room
       io.to(roomId).emit('player-joined', {
@@ -191,15 +205,40 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Request player assignment
+  socket.on('request-player-assignment', ({ roomId }) => {
+    const roomData = activeRooms.get(roomId);
+    if (roomData && socket.playerId) {
+      socket.emit('player-assignment', { 
+        playerId: socket.playerId,
+        roomId: roomId 
+      });
+    }
+  });
+
   // Player ready to start game
   socket.on('player-ready', ({ roomId }) => {
     const roomData = activeRooms.get(roomId);
     if (roomData) {
       roomData.readyPlayers.add(socket.id);
       
-      // If both players ready, start game
+      // If both players ready, start game and send assignments
       if (roomData.readyPlayers.size === 2) {
-        io.to(roomId).emit('game-start', { roomId });
+        // Send player assignments to both players
+        roomData.players.forEach(playerSocketId => {
+          const playerSocket = io.sockets.sockets.get(playerSocketId);
+          if (playerSocket && playerSocket.playerId) {
+            playerSocket.emit('player-assignment', {
+              playerId: playerSocket.playerId,
+              roomId: roomId
+            });
+          }
+        });
+        
+        // Small delay to ensure assignments are received
+        setTimeout(() => {
+          io.to(roomId).emit('game-start', { roomId });
+        }, 100);
       }
     }
   });
@@ -207,15 +246,29 @@ io.on('connection', (socket) => {
   // Game state updates (player movement, shooting, etc.)
   socket.on('game-update', ({ roomId, gameState }) => {
     // Broadcast to other players in room
-    socket.to(roomId).emit('game-state', gameState);
+    socket.to(roomId).emit('game-state-update', gameState);
   });
 
   // Player input (movement, shooting)
   socket.on('player-input', ({ roomId, input }) => {
-    // Broadcast input to other players
-    socket.to(roomId).emit('player-input-received', {
-      playerName: socket.playerName,
-      input
+    // Add playerId to input if not present
+    if (!input.playerId && socket.playerId) {
+      input.playerId = socket.playerId;
+    }
+    
+    // Broadcast input to other players in room
+    socket.to(roomId).emit('remote-input', {
+      playerId: input.playerId || socket.playerId,
+      input: input
+    });
+  });
+
+  // Power-up spawn event (for synchronization)
+  socket.on('powerup-spawn', ({ roomId, powerUp }) => {
+    // Broadcast power-up spawn to other players in room
+    socket.to(roomId).emit('powerup-spawn', {
+      roomId: roomId,
+      powerUp: powerUp
     });
   });
 

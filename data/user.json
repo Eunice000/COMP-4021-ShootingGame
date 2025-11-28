@@ -19,6 +19,14 @@
     {
       "name": "123",
       "passwordHash": "$2b$10$aZm7r6SfjLoeh39Xlwcpue6zaECKwd6tBDOKWW5SELrjDJRtCvMX2"
+    },
+    {
+      "name": "Samuel",
+      "passwordHash": "$2b$10$jNAKoCqXI9FvOAjKUAgfGeDIGpMPeM9gJ8nKUt3KVeQxOzD1QQA4C"
+    },
+    {
+      "name": "Sam",
+      "passwordHash": "$2b$10$sm5fYqg7ke3Pspz7UfoWCO3nhh8Q6Dt4gn468xGZwG9hdUSa5KFPu"
     }
   ]
 }

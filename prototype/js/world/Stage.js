@@ -355,7 +355,7 @@ Stage.prototype._tryFire = function (playerIndex) {
     }
 };
 
-// Apply bullet hit effects (knockback)
+// Apply bullet hit effects (knockback) - Gun Mayhem 2 style
 Stage.prototype._applyBulletHit = function (hit) {
     const pl = hit.player;
     if (!pl) return;
@@ -364,17 +364,29 @@ Stage.prototype._applyBulletHit = function (hit) {
         return; // no knockback or hurt stun applied
     }
     const projCfg = (this.game.config && this.game.config.projectile) || {};
-    const baseKbX = (projCfg.knockbackX != null ? projCfg.knockbackX : 800);
-    const stunMs = (projCfg.knockbackDurationMs != null ? projCfg.knockbackDurationMs : 180);
-    // Prefer bullet power if present
+    const baseKbX = (projCfg.knockbackX != null ? projCfg.knockbackX : 1200);
+    const baseKbY = (projCfg.knockbackY != null ? projCfg.knockbackY : -300);
+    const stunMs = (projCfg.knockbackDurationMs != null ? projCfg.knockbackDurationMs : 200);
+    
+    // Prefer bullet power if present (scale knockback based on weapon power)
     const power = (hit.bullet && typeof hit.bullet.power === 'number') ? hit.bullet.power : baseKbX;
+    const kbX = power; // Horizontal knockback scales with weapon power
+    const kbY = baseKbY * (power / baseKbX); // Vertical knockback also scales
+    
     // Determine the bullet direction from its vx
     const dir = hit.bullet && hit.bullet.vx < 0 ? -1 : 1;
-    // Apply knockback as a horizontal impulse (additive)
-    pl.vx += dir * power;
-    // Optional brief hurt-stun to preserve the knockback feel (kept from previous behavior)
+    
+    // Apply knockback as impulses (Gun Mayhem 2 style - sends players flying)
+    pl.vx += dir * kbX;
+    // Add upward knockback to send players flying off platforms
+    if (kbY < 0) {
+        pl.vy += kbY; // Upward force
+    }
+    
+    // Optional brief hurt-stun to preserve the knockback feel
     if (typeof pl.hurtTimerMs === 'number') pl.hurtTimerMs = Math.max(pl.hurtTimerMs || 0, stunMs);
-    // Pure horizontal knockback: do not modify vertical velocity
+    
+    // Knockback sends player into the air
     pl.onGround = false;
 
     // Record last hitter for kill attribution
