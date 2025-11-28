@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Smashfire Arena Prototype</title>
+    <link rel="stylesheet" href="css/styles.css"/>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<!-- jQuery -->
+<script src="https://code.jquery.com/jquery-3.6.1.min.js"></script>
+
+<!-- Configs -->
+<script src="js/config/gameConfig.js"></script>
+<script src="js/config/controlsConfig.js"></script>
+<script src="js/config/contentConfig.js"></script>
+
+<!-- Embedded content data (split by category; enables file:// mode) -->
+<script src="js/assets/GunsData.js"></script>
+<script src="js/assets/PlayersData.js"></script>
+<script src="js/assets/MapsData.js"></script>
+<script src="js/assets/PowerUpsData.js"></script>
+
+<!-- Content Loaders -->
+<script src="js/guns/GunLoader.js"></script>
+<script src="js/utils/RegistryLoader.js"></script>
+<script src="js/players/PlayerLoader.js"></script>
+<script src="js/powerups/PowerUpLoader.js"></script>
+
+<!-- Core -->
+<script src="js/core/Timer.js"></script>
+<script src="js/core/StateMachine.js"></script>
+<script src="js/core/Renderer.js"></script>
+<script src="js/core/Physics.js"></script>
+<script src="js/core/Collision.js"></script>
+<script src="js/core/Input.js"></script>
+<script src="js/core/Game.js"></script>
+
+<!-- Entities -->
+<script src="js/entities/Entity.js"></script>
+<script src="js/entities/Platform.js"></script>
+<script src="js/powerups/PowerUp.js"></script>
+<script src="js/guns/Gun.js"></script>
+<script src="js/players/Player.js"></script>
+<script src="js/players/PlayerController.js"></script>
+<script src="js/entities/Bullet.js"></script>
+
+<!-- World -->
+<script src="js/world/StageLoader.js"></script>
+<script src="js/world/Stage.js"></script>
+
+<!-- UI -->
+<script src="js/ui/GameplayUI.js"></script>
+<script src="js/ui/GameOverUi.js"></script>
+
+<!-- States -->
+<script src="js/states/CountdownState.js"></script>
+<script src="js/states/GameplayState.js"></script>
+<script src="js/states/GameOverState.js"></script>
+<script src="js/states/BootState.js"></script>
+
+<!-- Entry -->
+<script src="js/game.js"></script>
+</body>
+</html>

@@ -15,6 +15,10 @@
     {
       "name": "test1",
       "passwordHash": "$2b$10$0g/b7tnaUSiUNbpCKlPNPuV5NuHirlofcwFegOl4fn0WqIjOy0oAa"
+    },
+    {
+      "name": "123",
+      "passwordHash": "$2b$10$aZm7r6SfjLoeh39Xlwcpue6zaECKwd6tBDOKWW5SELrjDJRtCvMX2"
     }
   ]
 }

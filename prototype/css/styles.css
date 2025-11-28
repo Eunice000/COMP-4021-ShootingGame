@@ -1,0 +1,18 @@
+html, body {
+    margin: 0; /* removes the browser’s default 8px margin */
+    height: 100%;
+}
+
+/* add game window (canvas) */
+#game {
+    display: block;
+    outline: 2px solid #000; /* outline doesn’t take up space */
+}
+
+/* center the game (canvas) */
+body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
