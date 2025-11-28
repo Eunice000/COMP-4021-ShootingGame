@@ -3,7 +3,8 @@
             const startBtn = document.getElementById('startBtn');
             const startGameWrap = document.querySelector('.start-game');
             const login = document.querySelector('.login-container');
-            const bgm = document.getElementById('BackgroundMusic');
+
+            
 
             if (!login) return;
 
@@ -11,10 +12,6 @@
             login.classList.add('login-hidden');
 
                 function showLogin() {
-                    if (bgm) {
-                        bgm.currentTime = 0;
-                        bgm.play().catch(() => { });
-                    }
                     if (startGameWrap) {
                         startGameWrap.classList.add('hidden');
                          startGameWrap.style.display = 'none';
@@ -33,4 +30,6 @@
                         showLogin();
                     }
                 });
+
+                
             })();

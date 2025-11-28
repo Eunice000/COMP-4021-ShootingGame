@@ -121,7 +121,10 @@
         });
         const data = await res.json();
         if (res.ok && data.ok) {
-          if (createdRoom) createdRoom.textContent = 'Room created: ' + data.room.id;
+          if (createdRoom) {
+            createdRoom.textContent = 'Room created: ' + data.room.id;
+            document.getElementById("findRoomBtn").disabled = true;
+          }
         } else {
           showMessage(data.error || 'Failed to create room');
         }
@@ -130,7 +133,7 @@
       }
     });
   }
-
+// if created room, cannot find room  
   if (findRoomBtn) {
     findRoomBtn.addEventListener('click', async function(){
       const want = (findRoomInput && findRoomInput.value || '').trim();
@@ -155,7 +158,20 @@
       }
     });
   }
+  
+  const quitRoomBtn = document.getElementById('quitRoomBtn');
+  if (quitRoomBtn) {
+    quitRoomBtn.addEventListener('click', function(){
+      const pairup = document.getElementById('pairupContainer');
+      if (pairup) {
+      if (createdRoom) createdRoom.textContent = '';
+      if (foundRoom) foundRoom.textContent = '';
+      document.getElementById("findRoomBtn").disabled = false;
+      }
 
+    }
+  );
+  }
   if (backToLoginBtn) {
     backToLoginBtn.addEventListener('click', function(){
       const pairup = document.getElementById('pairupContainer');
