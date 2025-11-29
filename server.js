@@ -461,7 +461,7 @@ io.on('connection', (socket) => {
       // Individual key event - convert to state
       const controlsConfig = {
         p1: { left: 'KeyA', right: 'KeyD', up: 'KeyW', down: 'KeyS', fire: 'KeyF' },
-        p2: { left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown', fire: 'Slash' }
+        p2: { left: 'KeyA', right: 'KeyD', up: 'KeyW', down: 'KeyS', fire: 'KeyF' }
       };
       
       const playerControls = controlsConfig[playerId] || {};
