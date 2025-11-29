@@ -171,7 +171,11 @@
 
   // Initialize socket connection
   function initSocket() {
-    if (socket && socket.connected) return socket;
+    if (socket && socket.connected) {
+      // Socket already exists and is connected, ensure listeners are set up
+      setupSocketListeners();
+      return socket;
+    }
     
     // Always connect to the same origin that served the page
     // This ensures Socket.IO connects correctly whether accessed via localhost or IP address
@@ -180,12 +184,35 @@
     
     socket.on('connect', () => {
       console.log('Connected to server');
+      setupSocketListeners();
     });
 
     socket.on('disconnect', () => {
       console.log('Disconnected from server');
     });
+    
+    // Set up listeners immediately if socket is already connected
+    if (socket.connected) {
+      setupSocketListeners();
+    }
+  }
+  
+  // Set up socket event listeners
+  function setupSocketListeners() {
+    if (!socket) return;
 
+    // Remove existing listeners to avoid duplicates
+    socket.off('player-joined');
+    socket.off('room-ready');
+    socket.off('game-start');
+    socket.off('player-input-received');
+    socket.off('game-state');
+    socket.off('player-left');
+    socket.off('player-left-room');
+    socket.off('room-closed');
+    socket.off('error');
+    socket.off('both-players-ready');
+    
     socket.on('player-joined', (data) => {
       console.log('Player joined:', data);
       if (foundRoom) {
@@ -237,6 +264,7 @@
     });
 
     socket.on('player-left', (data) => {
+      console.log('[auth.js] Player left:', data);
       showMessage(`Player ${data.playerName} left the game`);
       if (foundRoom) foundRoom.textContent = `Player ${data.playerName} left`;
       if (createdRoom) createdRoom.textContent = `Player ${data.playerName} left`;
@@ -247,9 +275,88 @@
         startGameBtn.textContent = 'Start Game';
       }
     });
+    
+    // Listen for player leaving room (room closing)
+    socket.on('player-left-room', (data) => {
+      console.log('[auth.js] Player left room, room closing:', data);
+      showMessage(data.message || 'The other player has left. Room is closing.');
+      
+      // Clear room information
+      currentRoomId = null;
+      if (foundRoom) {
+        foundRoom.textContent = '';
+      }
+      if (createdRoom) {
+        createdRoom.textContent = '';
+      }
+      
+      // Hide and reset start game button
+      if (startGameBtn) {
+        startGameBtn.style.display = 'none';
+        startGameBtn.disabled = false;
+        startGameBtn.textContent = 'Start Game';
+      }
+      
+      // Clear find room input
+      if (findRoomInput) {
+        findRoomInput.value = '';
+      }
+      
+      // Reset start requests if any
+      if (socket && socket.connected) {
+        // The server will handle cleaning up startRequests
+      }
+    });
+    
+    // Listen for room closed event
+    socket.on('room-closed', (data) => {
+      console.log('[auth.js] Room closed:', data);
+      
+      // Only show message if we haven't already shown player-left-room message
+      // (to avoid duplicate messages)
+      if (currentRoomId) {
+        showMessage('Room has been closed. You can create or join a new room.');
+      }
+      
+      // Clear room information
+      currentRoomId = null;
+      if (foundRoom) {
+        foundRoom.textContent = '';
+      }
+      if (createdRoom) {
+        createdRoom.textContent = '';
+      }
+      
+      // Hide and reset start game button
+      if (startGameBtn) {
+        startGameBtn.style.display = 'none';
+        startGameBtn.disabled = false;
+        startGameBtn.textContent = 'Start Game';
+      }
+      
+      // Clear find room input
+      if (findRoomInput) {
+        findRoomInput.value = '';
+      }
+    });
 
     socket.on('error', (error) => {
       showMessage('Error: ' + error.message);
+    });
+    
+    // Listen for both players ready signal
+    socket.on('both-players-ready', (data) => {
+      console.log('[auth.js] both-players-ready received:', data);
+      if (data.roomId === currentRoomId) {
+        console.log('[auth.js] Room ID matches, navigating to game page');
+        // Both players pressed start, now navigate
+        if (startGameBtn) {
+          startGameBtn.textContent = 'Starting...';
+        }
+        setTimeout(() => {
+          window.location.href = '/game.html?roomId=' + encodeURIComponent(currentRoomId);
+        }, 100);
+      }
     });
   }
 
@@ -276,8 +383,52 @@
 
   // server-backed rooms
   
+  // Function to leave current room
+  function leaveCurrentRoom() {
+    if (socket && currentRoomId) {
+      console.log('[auth.js] Leaving room:', currentRoomId);
+      
+      // Ensure socket is connected before sending leave-room
+      if (socket.connected) {
+        socket.emit('leave-room', { roomId: currentRoomId });
+      } else {
+        // If socket not connected, wait for connection
+        socket.once('connect', () => {
+          socket.emit('leave-room', { roomId: currentRoomId });
+        });
+      }
+      
+      // Clear local room information immediately
+      const roomIdToLeave = currentRoomId;
+      currentRoomId = null;
+      
+      // Clear room information
+      if (foundRoom) {
+        foundRoom.textContent = '';
+      }
+      if (createdRoom) {
+        createdRoom.textContent = '';
+      }
+      
+      // Hide and reset start game button
+      if (startGameBtn) {
+        startGameBtn.style.display = 'none';
+        startGameBtn.disabled = false;
+        startGameBtn.textContent = 'Start Game';
+      }
+      
+      // Clear find room input
+      if (findRoomInput) {
+        findRoomInput.value = '';
+      }
+    }
+  }
+
   if (createRoomBtn) {
     createRoomBtn.addEventListener('click', async function(){
+      // Leave current room if in one
+      leaveCurrentRoom();
+      
       const hostName = currentUser || (nameInput && nameInput.value.trim()) || 'anonymous';
       try{
         const res = await fetch(API_BASE + '/api/rooms', {
@@ -311,6 +462,9 @@
 
   if (findRoomBtn) {
     findRoomBtn.addEventListener('click', async function(){
+      // Leave current room if in one (before joining new room)
+      leaveCurrentRoom();
+      
       const want = (findRoomInput && findRoomInput.value || '').trim();
       if (!want) return showMessage('Enter a room number to find');
       try{
@@ -363,21 +517,38 @@
   if (startGameBtn) {
     startGameBtn.addEventListener('click', function(){
       if (socket && currentRoomId) {
-        // Send ready signal to start the game
-        if (window.sendPlayerReady) {
-          window.sendPlayerReady();
-        } else {
-          socket.emit('player-ready', { roomId: currentRoomId });
-        }
+        console.log('[auth.js] Start Game button clicked, roomId:', currentRoomId);
+        // Store player name in sessionStorage for game page
+        const playerName = currentUser || (nameInput && nameInput.value.trim()) || 'Player';
+        sessionStorage.setItem('playerName', playerName);
+        
         // Disable button to prevent multiple clicks
         startGameBtn.disabled = true;
-        startGameBtn.textContent = 'Starting...';
+        startGameBtn.textContent = 'Waiting for other player...';
+        
+        // Ensure socket is connected
+        if (!socket.connected) {
+          console.warn('[auth.js] Socket not connected, waiting...');
+          socket.once('connect', () => {
+            console.log('[auth.js] Socket connected, sending request-start-game');
+            socket.emit('request-start-game', { roomId: currentRoomId });
+          });
+        } else {
+          // Send request to start game (but don't navigate yet)
+          console.log('[auth.js] Sending request-start-game');
+          socket.emit('request-start-game', { roomId: currentRoomId });
+        }
+      } else {
+        console.error('[auth.js] Socket or roomId not available', { socket: !!socket, currentRoomId });
       }
     });
   }
 
   if (backToLoginBtn) {
     backToLoginBtn.addEventListener('click', function(){
+      // Leave current room before logging out
+      leaveCurrentRoom();
+      
       const pairup = document.getElementById('pairupContainer');
       const login = document.querySelector('.login-container');
       if (pairup) {

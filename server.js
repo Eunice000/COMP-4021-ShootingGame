@@ -5,6 +5,7 @@ const bcrypt = require('bcrypt');
 const bodyParser = require('body-parser');
 const http = require('http');
 const { Server } = require('socket.io');
+const { ServerGameState } = require('./server-game-logic');
 
 const app = express();
 const server = http.createServer(app);
@@ -134,7 +135,7 @@ app.post('/api/rooms/:id/join', async (req, res) => {
 });
 
 // Store active game rooms in memory (in addition to file storage)
-const activeRooms = new Map(); // roomId -> { players: Set of socketIds, gameState: {...} }
+const activeRooms = new Map(); // roomId -> { players: Set of socketIds, gameState: ServerGameState, readyPlayers: Set, playerAssignments: Map }
 
 // WebSocket connection handling
 io.on('connection', (socket) => {
@@ -143,6 +144,71 @@ io.on('connection', (socket) => {
   // Join a room
   socket.on('join-room', async ({ roomId, playerName }) => {
     try {
+      // If player is already in another room, leave it first
+      if (socket.roomId && socket.roomId !== roomId) {
+        console.log('[server] Player already in room', socket.roomId, ', leaving before joining', roomId);
+        const oldRoomId = socket.roomId;
+        const oldRoomData = activeRooms.get(oldRoomId);
+        if (oldRoomData) {
+          // Remove player from old room
+          oldRoomData.players.delete(socket.id);
+          if (oldRoomData.readyPlayers) {
+            oldRoomData.readyPlayers.delete(socket.id);
+          }
+          if (oldRoomData.startRequests) {
+            oldRoomData.startRequests.delete(socket.id);
+          }
+          
+          // Stop game if running
+          if (oldRoomData.gameState) {
+            if (oldRoomData.gameState.running) {
+              oldRoomData.gameState.stop();
+            }
+            if (oldRoomData.gameStateInterval) {
+              clearInterval(oldRoomData.gameStateInterval);
+              oldRoomData.gameStateInterval = null;
+            }
+            oldRoomData.gameState = null;
+          }
+          
+          // Get remaining players in old room
+          const remainingPlayers = Array.from(oldRoomData.players);
+          
+          // Notify remaining players if any
+          if (remainingPlayers.length > 0) {
+            io.to(oldRoomId).emit('player-left-room', {
+              playerName: socket.playerName || 'A player',
+              message: 'The other player has left. Room is closing. You can create or join a new room.'
+            });
+            
+            setTimeout(() => {
+              io.to(oldRoomId).emit('room-closed', {
+                roomId: oldRoomId,
+                message: 'Room has been closed due to player leaving.'
+              });
+              
+              remainingPlayers.forEach(playerSocketId => {
+                const playerSocket = io.sockets.sockets.get(playerSocketId);
+                if (playerSocket) {
+                  playerSocket.leave(oldRoomId);
+                  playerSocket.roomId = null;
+                }
+              });
+              
+              activeRooms.delete(oldRoomId);
+              console.log('[server] Old room closed:', oldRoomId);
+            }, 100);
+          } else {
+            // No remaining players, just close the room
+            activeRooms.delete(oldRoomId);
+            console.log('[server] Old room closed (no remaining players):', oldRoomId);
+          }
+          
+          // Remove player from old socket room
+          socket.leave(oldRoomId);
+        }
+      }
+      
       const rooms = await readRooms();
       const room = rooms.find(r => r.id === roomId);
       
@@ -165,8 +231,9 @@ io.on('connection', (socket) => {
       if (!activeRooms.has(roomId)) {
         activeRooms.set(roomId, {
           players: new Set(),
-          gameState: null,
+          gameState: null, // Will be ServerGameState instance when game starts
           readyPlayers: new Set(),
+          startRequests: new Set(), // Track players who pressed Start button
           playerAssignments: new Map() // socketId -> 'p1' or 'p2'
         });
       }
@@ -216,14 +283,108 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Player ready to start game
+  // Player leaves room (active leave, not disconnect)
+  socket.on('leave-room', ({ roomId }) => {
+    console.log('[server] Player leaving room:', socket.id, 'from room', roomId);
+    const roomData = activeRooms.get(roomId);
+    if (roomData) {
+      // Get remaining players BEFORE removing the leaving player
+      const remainingPlayers = Array.from(roomData.players).filter(id => id !== socket.id);
+      
+      // First, remove the leaving player from socket room (so they won't receive notifications)
+      socket.leave(roomId);
+      socket.roomId = null;
+      
+      // Now remove the leaving player from room data
+      roomData.players.delete(socket.id);
+      if (roomData.readyPlayers) {
+        roomData.readyPlayers.delete(socket.id);
+      }
+      if (roomData.startRequests) {
+        roomData.startRequests.delete(socket.id);
+      }
+      
+      // Stop game if running
+      if (roomData.gameState) {
+        if (roomData.gameState.running) {
+          roomData.gameState.stop();
+        }
+        if (roomData.gameStateInterval) {
+          clearInterval(roomData.gameStateInterval);
+          roomData.gameStateInterval = null;
+        }
+        roomData.gameState = null;
+      }
+      
+      // Notify remaining players (NOT the leaving player) that a player is leaving
+      if (remainingPlayers.length > 0) {
+        // Notify remaining players that a player left
+        io.to(roomId).emit('player-left-room', {
+          playerName: socket.playerName || 'A player',
+          message: 'The other player has left. Room is closing. You can create or join a new room.'
+        });
+        
+        // Small delay to ensure notification is received before closing
+        setTimeout(() => {
+          // Then send room-closed event to remaining players
+          io.to(roomId).emit('room-closed', {
+            roomId: roomId,
+            message: 'Room has been closed due to player leaving.'
+          });
+          
+          // Remove remaining players from the room (they need to rejoin)
+          remainingPlayers.forEach(playerSocketId => {
+            const playerSocket = io.sockets.sockets.get(playerSocketId);
+            if (playerSocket) {
+              playerSocket.leave(roomId);
+              playerSocket.roomId = null;
+            }
+          });
+          
+          // Close the room - remove it completely (after notifications are sent)
+          activeRooms.delete(roomId);
+          console.log('[server] Room closed due to player leaving:', roomId, 'Remaining players notified');
+        }, 200); // Give time for notifications to be sent
+      } else {
+        // No remaining players, just close the room
+        activeRooms.delete(roomId);
+        console.log('[server] Room closed (no remaining players):', roomId);
+      }
+    }
+  });
+
+  // Track players who want to start (on index.html)
+  socket.on('request-start-game', ({ roomId }) => {
+    console.log('[server] request-start-game received from', socket.id, 'for room', roomId);
+    const roomData = activeRooms.get(roomId);
+    if (roomData) {
+      if (!roomData.startRequests) {
+        roomData.startRequests = new Set();
+      }
+      roomData.startRequests.add(socket.id);
+      console.log('[server] startRequests size:', roomData.startRequests.size, 'players size:', roomData.players.size);
+      
+      // If both players requested start, notify them to navigate
+      if (roomData.startRequests.size === 2 && roomData.players.size === 2) {
+        console.log('[server] Both players ready, sending both-players-ready to room', roomId);
+        io.to(roomId).emit('both-players-ready', { roomId });
+      }
+    } else {
+      console.warn('[server] Room not found:', roomId);
+    }
+  });
+
+  // Player ready to start game (on game.html)
   socket.on('player-ready', ({ roomId }) => {
     const roomData = activeRooms.get(roomId);
     if (roomData) {
+      if (!roomData.readyPlayers) {
+        roomData.readyPlayers = new Set();
+      }
       roomData.readyPlayers.add(socket.id);
       
       // If both players ready, start game and send assignments
-      if (roomData.readyPlayers.size === 2) {
+      if (roomData.readyPlayers.size === 2 && !roomData.gameState) {
         // Send player assignments to both players
         roomData.players.forEach(playerSocketId => {
           const playerSocket = io.sockets.sockets.get(playerSocketId);
@@ -235,9 +396,44 @@ io.on('connection', (socket) => {
           }
         });
         
-        // Small delay to ensure assignments are received
+        // Initialize server-side game state (but don't start yet)
+        roomData.gameState = new ServerGameState(roomId);
+        // Don't start the game loop yet - wait for 3 second countdown to finish
+        
+        // Small delay to ensure assignments are received, then send game-start
+        // This triggers the 3-second countdown on clients
         setTimeout(() => {
           io.to(roomId).emit('game-start', { roomId });
+          
+          // After 3.5 seconds (3 second countdown + 0.5 second "GO!"), actually start the game
+          setTimeout(() => {
+            if (roomData.gameState && roomData.players.size === 2) {
+              roomData.gameState.start();
+              
+              // Start sending game state updates to clients
+              const gameStateInterval = setInterval(() => {
+                if (roomData.gameState) {
+                  const state = roomData.gameState.getGameState();
+                  io.to(roomId).emit('server-game-state', state);
+                  
+                  // If game is over, send game-over event and stop the interval
+                  if (state.gameOver && state.winner !== undefined) {
+                    io.to(roomId).emit('game-over', { 
+                      winner: state.winner,
+                      stats: state.stats 
+                    });
+                    clearInterval(gameStateInterval);
+                    roomData.gameStateInterval = null;
+                  }
+                } else {
+                  clearInterval(gameStateInterval);
+                  roomData.gameStateInterval = null;
+                }
+              }, 1000 / 60); // 60 updates per second
+              
+              roomData.gameStateInterval = gameStateInterval;
+            }
+          }, 3500); // Wait for 3 second countdown + 0.5 second "GO!"
         }, 100);
       }
     }
@@ -249,18 +445,47 @@ io.on('connection', (socket) => {
     socket.to(roomId).emit('game-state-update', gameState);
   });
 
-  // Player input (movement, shooting)
+  // Player input (movement, shooting) - server authoritative
   socket.on('player-input', ({ roomId, input }) => {
-    // Add playerId to input if not present
-    if (!input.playerId && socket.playerId) {
-      input.playerId = socket.playerId;
-    }
+    const roomData = activeRooms.get(roomId);
+    if (!roomData || !roomData.gameState) return;
     
-    // Broadcast input to other players in room
-    socket.to(roomId).emit('remote-input', {
-      playerId: input.playerId || socket.playerId,
-      input: input
-    });
+    const playerId = socket.playerId;
+    if (!playerId) return;
+    
+    // Update server game state with player input
+    if (input.state) {
+      // Full input state
+      roomData.gameState.updatePlayerInput(playerId, input.state);
+    } else if (input.keyCode && input.eventType) {
+      // Individual key event - convert to state
+      const controlsConfig = {
+        p1: { left: 'KeyA', right: 'KeyD', up: 'KeyW', down: 'KeyS', fire: 'KeyF' },
+        p2: { left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown', fire: 'Slash' }
+      };
+      
+      const playerControls = controlsConfig[playerId] || {};
+      let action = null;
+      for (const [act, code] of Object.entries(playerControls)) {
+        if (code === input.keyCode) {
+          action = act;
+          break;
+        }
+      }
+      
+      if (action) {
+        const currentInput = roomData.gameState.playerInputs[playerId] || {};
+        const newInput = { ...currentInput };
+        
+        if (input.eventType === 'keydown') {
+          newInput[action] = true;
+        } else if (input.eventType === 'keyup') {
+          newInput[action] = false;
+        }
+        
+        roomData.gameState.updatePlayerInput(playerId, newInput);
+      }
+    }
   });
 
   // Power-up spawn event (for synchronization)
@@ -274,24 +499,69 @@ io.on('connection', (socket) => {
 
   // Disconnect handling
   socket.on('disconnect', () => {
+    console.log('[server] User disconnected:', socket.id);
     if (socket.roomId) {
-      const roomData = activeRooms.get(socket.roomId);
+      const roomId = socket.roomId;
+      const roomData = activeRooms.get(roomId);
       if (roomData) {
-        roomData.players.delete(socket.id);
-        roomData.readyPlayers.delete(socket.id);
+        // Get remaining players BEFORE removing the disconnected player
+        const remainingPlayers = Array.from(roomData.players).filter(id => id !== socket.id);
         
-        // Notify other players
-        socket.to(socket.roomId).emit('player-left', {
-          playerName: socket.playerName
-        });
-
-        // Clean up empty rooms
-        if (roomData.players.size === 0) {
-          activeRooms.delete(socket.roomId);
+        // First, notify other players that a player left (before closing room)
+        if (remainingPlayers.length > 0) {
+          // Notify remaining players that a player left
+          io.to(roomId).emit('player-left-room', {
+            playerName: socket.playerName || 'A player',
+            message: 'The other player has left. Room is closing. You can create or join a new room.'
+          });
+          
+          // Small delay to ensure notification is received before closing
+          setTimeout(() => {
+            // Then send room-closed event
+            io.to(roomId).emit('room-closed', {
+              roomId: roomId,
+              message: 'Room has been closed due to player leaving.'
+            });
+            
+            // Remove remaining players from the room (they need to rejoin)
+            remainingPlayers.forEach(playerSocketId => {
+              const playerSocket = io.sockets.sockets.get(playerSocketId);
+              if (playerSocket) {
+                playerSocket.leave(roomId);
+                playerSocket.roomId = null;
+              }
+            });
+          }, 100);
         }
+        
+        // Now remove the disconnected player from room data
+        roomData.players.delete(socket.id);
+        if (roomData.readyPlayers) {
+          roomData.readyPlayers.delete(socket.id);
+        }
+        if (roomData.startRequests) {
+          roomData.startRequests.delete(socket.id);
+        }
+      
+        // Stop game if running
+        if (roomData.gameState) {
+          if (roomData.gameState.running) {
+            roomData.gameState.stop();
+          }
+          if (roomData.gameStateInterval) {
+            clearInterval(roomData.gameStateInterval);
+            roomData.gameStateInterval = null;
+          }
+          roomData.gameState = null;
+        }
+
+        // Close the room - remove it completely (after notification)
+        setTimeout(() => {
+          activeRooms.delete(roomId);
+          console.log('[server] Room closed:', roomId, 'Remaining players notified');
+        }, 200); // Give time for notifications to be sent
       }
     }
-    console.log('User disconnected:', socket.id);
   });
 });
 
