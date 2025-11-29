@@ -33,6 +33,15 @@ app.use((req, res, next) => {
 });
 
 app.use(bodyParser.json());
+
+// Handle favicon request to avoid 404 errors
+app.get('/favicon.ico', (req, res) => {
+  // Return a simple SVG favicon
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🎮</text></svg>';
+  res.type('image/svg+xml');
+  res.send(svg);
+});
+
 // serve static site files so front-end can run from same origin
 app.use(express.static(path.join(__dirname)));
 

@@ -3,6 +3,7 @@
 
 <head>
     <title>Page Title</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>">
     <link rel="stylesheet" href="css/start_game.css">
     <link rel="stylesheet" href="prototype/css/styles.css">
     <script>
@@ -20,10 +21,13 @@
                 return msg.includes('message port closed') ||
                        msg.includes('message port') ||
                        msg.includes('port closed') ||
+                       msg.includes('the message port') ||
+                       msg.includes('port closed before') ||
                        msg.includes('immersive translate') ||
                        msg.includes('immersivetranslate') ||
                        msg.includes('immersive') ||
                        msg.includes('translate error') ||
+                       msg.includes('translate error:') ||
                        msg.includes('model not available') ||
                        msg.includes('unknownerror') ||
                        msg.includes('unknown error') ||
@@ -37,23 +41,62 @@
                        msg.includes('content-script.js') ||
                        msg.includes('content.js') ||
                        msg.includes('content_script') ||
+                       msg.includes('content:') ||
                        msg.includes('assets.immersivetranslate.cn') ||
                        msg.includes('analytics: sent') ||
                        msg.includes('analytics event') ||
                        msg.includes('analytics') ||
+                       msg.includes('sent 1') ||
+                       msg.includes('sent ') ||
                        (msg.includes('404') && msg.includes('immersivetranslate')) ||
                        msg.includes('chrome-extension://') ||
                        msg.includes('moz-extension://') ||
                        msg.includes('safari-extension://') ||
+                       // 檢查文件名模式 - 如果包含 content 和錯誤相關詞
+                       (msg.includes('content') && (msg.includes('error') || msg.includes('uncaught') || msg.includes('promise'))) ||
                        // 檢查文件名模式
-                       (msg.includes('error') && (msg.includes('content_script') || msg.includes('immersive')));
+                       (msg.includes('error') && (msg.includes('content_script') || msg.includes('content') || msg.includes('immersive'))) ||
+                       // 檢查是否包含 "translate" 和 "error"
+                       (msg.includes('translate') && msg.includes('error')) ||
+                       // 檢查是否包含 "model not available"
+                       (msg.includes('model') && msg.includes('not') && msg.includes('available'));
             };
             
             // 過濾 Immersive Translate 和 message port 相關錯誤
             const filterErrors = (args) => {
                 if (!args || args.length === 0) return false;
                 
-                // 檢查所有參數
+                // 將所有參數合併成一個字符串進行檢查（包括堆疊追蹤）
+                let combinedText = '';
+                for (let i = 0; i < args.length; i++) {
+                    const arg = args[i];
+                    if (arg !== null && arg !== undefined) {
+                        if (typeof arg === 'string') {
+                            combinedText += arg + ' ';
+                        } else if (typeof arg === 'object') {
+                            // 檢查對象的所有字符串屬性
+                            if (arg.message) combinedText += String(arg.message) + ' ';
+                            if (arg.toString) combinedText += String(arg.toString()) + ' ';
+                            if (arg.stack) combinedText += String(arg.stack) + ' ';
+                            if (arg.name) combinedText += String(arg.name) + ' ';
+                            // 檢查對象的所有屬性
+                            for (const key in arg) {
+                                if (typeof arg[key] === 'string') {
+                                    combinedText += arg[key] + ' ';
+                                }
+                            }
+                        } else {
+                            combinedText += String(arg) + ' ';
+                        }
+                    }
+                }
+                
+                // 檢查合併後的文本
+                if (isExtensionError(combinedText)) {
+                    return true;
+                }
+                
+                // 也檢查每個參數單獨
                 for (let i = 0; i < args.length; i++) {
                     const arg = args[i];
                     // 直接檢查參數
@@ -99,8 +142,21 @@
             
             // 過濾擴展相關的日誌
             console.log = function(...args) {
-                if (!filterErrors(args)) {
+                // 不要過濾包含 [game.html] 或 [client-game-renderer] 的日誌，這些是調試信息
+                let shouldFilter = false;
+                if (args && args.length > 0) {
+                    const firstArg = String(args[0] || '');
+                    if (firstArg.includes('[game.html]') || firstArg.includes('[client-game-renderer]')) {
+                        shouldFilter = false; // 不要過濾調試日誌
+                    } else {
+                        shouldFilter = filterErrors(args);
+                    }
+                }
+                
+                if (!shouldFilter) {
                     originalLog.apply(console, args);
+                } else {
+                    // 靜默過濾，不輸出任何內容
                 }
             };
             
@@ -110,26 +166,81 @@
                 let reasonStr = '';
                 let shouldSuppress = false;
                 
+                // 構建完整的錯誤文本（包括所有可能的屬性）
+                let fullErrorText = '';
+                
                 // 檢查多種形式的錯誤訊息
                 if (typeof reason === 'string') {
                     reasonStr = reason;
+                    fullErrorText = reasonStr;
                     shouldSuppress = isExtensionError(reasonStr);
                 } else if (reason) {
                     // 檢查 Error 對象
                     if (reason.message) {
                         reasonStr = reason.message;
+                        fullErrorText += reasonStr + ' ';
                         shouldSuppress = isExtensionError(reasonStr);
                     }
                     if (!shouldSuppress && reason.toString) {
-                        reasonStr = reason.toString();
-                        shouldSuppress = isExtensionError(reasonStr);
+                        const toStringResult = reason.toString();
+                        fullErrorText += toStringResult + ' ';
+                        shouldSuppress = isExtensionError(toStringResult);
                     }
                     if (!shouldSuppress && reason.stack) {
+                        fullErrorText += reason.stack + ' ';
                         shouldSuppress = isExtensionError(reason.stack);
                     }
                     // 檢查錯誤名稱
                     if (!shouldSuppress && reason.name) {
+                        fullErrorText += reason.name + ' ';
                         shouldSuppress = isExtensionError(reason.name);
+                    }
+                    // 檢查文件名（如果錯誤對象有 source 或 filename 屬性）
+                    if (!shouldSuppress && reason.source) {
+                        fullErrorText += String(reason.source) + ' ';
+                        shouldSuppress = isExtensionError(String(reason.source));
+                    }
+                    if (!shouldSuppress && reason.filename) {
+                        fullErrorText += String(reason.filename) + ' ';
+                        shouldSuppress = isExtensionError(String(reason.filename));
+                    }
+                    // 檢查所有屬性
+                    if (!shouldSuppress) {
+                        for (const key in reason) {
+                            if (typeof reason[key] === 'string') {
+                                fullErrorText += reason[key] + ' ';
+                            }
+                        }
+                    }
+                }
+                
+                // 檢查合併後的完整文本
+                if (!shouldSuppress && fullErrorText) {
+                    shouldSuppress = isExtensionError(fullErrorText);
+                }
+                
+                // 額外檢查：如果錯誤消息包含 "message port" 和 "content" 或 "uncaught"，也應該過濾
+                if (!shouldSuppress && reasonStr) {
+                    const lowerReason = reasonStr.toLowerCase();
+                    if ((lowerReason.includes('message port') || lowerReason.includes('port closed')) &&
+                        (lowerReason.includes('content') || lowerReason.includes('uncaught') || lowerReason.includes('promise'))) {
+                        shouldSuppress = true;
+                    }
+                }
+                
+                // 檢查堆疊追蹤中是否包含 content.js
+                if (!shouldSuppress && reason && reason.stack) {
+                    const stack = String(reason.stack).toLowerCase();
+                    if (stack.includes('content.js') || stack.includes('content_script.js') || stack.includes('content:1')) {
+                        shouldSuppress = true;
+                    }
+                }
+                
+                // 最後檢查：如果包含 "content.js:1" 或 "content:1"，直接過濾
+                if (!shouldSuppress && fullErrorText) {
+                    const lowerText = fullErrorText.toLowerCase();
+                    if (lowerText.includes('content.js:1') || lowerText.includes('content:1')) {
+                        shouldSuppress = true;
                     }
                 }
                 
@@ -141,16 +252,27 @@
                 }
             }, true);
             
-            // 捕獲全局錯誤
+            // 捕獲全局錯誤 - 檢查文件名和消息
             window.addEventListener('error', function(event) {
                 let shouldSuppress = false;
                 
+                // 檢查錯誤消息
                 if (event.message && isExtensionError(event.message)) {
                     shouldSuppress = true;
                 }
-                if (!shouldSuppress && event.filename && isExtensionError(event.filename)) {
-                    shouldSuppress = true;
+                // 檢查文件名（這是關鍵 - content.js:1 會在 filename 中）
+                if (!shouldSuppress && event.filename) {
+                    const filename = String(event.filename).toLowerCase();
+                    if (filename.includes('content.js') || 
+                        filename.includes('content_script.js') ||
+                        filename.includes('content-script.js') ||
+                        filename.includes('chrome-extension://') ||
+                        filename.includes('moz-extension://') ||
+                        filename.includes('safari-extension://')) {
+                        shouldSuppress = true;
+                    }
                 }
+                // 檢查錯誤對象
                 if (!shouldSuppress && event.error) {
                     const error = event.error;
                     if (error.message && isExtensionError(error.message)) {
