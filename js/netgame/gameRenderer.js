@@ -234,11 +234,6 @@
         ctx.fillStyle = '#111';
         const indX = px + (p.facing>0 ? (w - 2) : -2);
         ctx.fillRect(indX, py + 14, 4, 14);
-
-        // lives text
-        ctx.fillStyle = '#111';
-        ctx.font = '22px monospace';
-        ctx.fillText('L'+(p.lives||0), px, py - 8);
       }
 
       // Draw bullets
@@ -271,9 +266,9 @@
     // Remove world clip before drawing UI/overlays in screen space
     ctx.restore();
 
-    // UI in screen space: time left top-center
+    // UI in screen space: time left top-center and HUD panels
     ctx.setTransform(1,0,0,1,0,0);
-    this._drawHUD(ctx, cw, ch, offY);
+    this._drawHUD(ctx, cw, ch, { x: offX, y: offY, w: drawW, h: drawH });
 
     // Game Over overlay if present
     if (this.gameOver){
@@ -366,54 +361,125 @@
   };
 
   // ---- UI drawing (mirrors prototype GameplayUI and GameOverUi in spirit) ----
-  GameRenderer.prototype._drawHUD = function(ctx, cw, ch, offY){
+  GameRenderer.prototype._drawHUD = function(ctx, cw, ch, worldRect){
     const snap = this.latest || {};
     const players = snap.players || [];
     const p1 = players[0] || {}; const p2 = players[1] || {};
-    // Colors similar to config
-    const cP1 = '#FF4040';
-    const cP2 = '#99CCFF';
-    const cUI = '#111';
 
-    // Round timer big at top center (prototype style) — hidden when game over shows its own timer
+    const colors = (snap && snap.colors) || {};
+    const colorP1 = colors.p1 || '#FF4040';
+    const colorP2 = colors.p2 || '#99CCFF';
+    const panelBg = '#FFFFFF';
+    const textColor = '#000000';
+
+    // Timer at the top-center of the WORLD rectangle, in black
+    const t = Math.max(0, Math.ceil(snap.timeLeft||0)) + '';
     ctx.save();
     ctx.font = '80px Segoe UI, Arial, sans-serif, monospace';
-    ctx.fillStyle = cUI;
+    ctx.fillStyle = '#000';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    const t = Math.max(0, Math.ceil(snap.timeLeft||0)) + '';
     if (!this.gameOver){
-      ctx.fillText(t, Math.floor(cw/2), 16);
+      const tx = Math.floor(worldRect.x + worldRect.w/2);
+      const ty = Math.max(8, worldRect.y + 8);
+      ctx.fillText(t, tx, ty);
     }
     ctx.restore();
 
-    const pad = 16; const panelW = 240; const panelH = 65;
-    // Panel helper
-    const drawPanel = (x,y,color)=>{
+    // Layout (inside world rectangle)
+    // Move boxes closer to the middle by increasing side padding dynamically
+    const pad = Math.max(48, Math.floor(worldRect.w * 0.035));
+    const panelW = 360; // narrower box
+    const panelH = 120; // smaller height
+    const y = worldRect.y + worldRect.h - pad - panelH; // bottom of world
+
+    // Helpers
+    const roundRect = (x,y,w,h,r)=>{
+      const rr = Math.max(0, Math.min(r, Math.min(w,h)*0.5));
+      ctx.beginPath();
+      ctx.moveTo(x+rr, y);
+      ctx.lineTo(x+w-rr, y);
+      ctx.quadraticCurveTo(x+w, y, x+w, y+rr);
+      ctx.lineTo(x+w, y+h-rr);
+      ctx.quadraticCurveTo(x+w, y+h, x+w-rr, y+h);
+      ctx.lineTo(x+rr, y+h);
+      ctx.quadraticCurveTo(x, y+h, x, y+h-rr);
+      ctx.lineTo(x, y+rr);
+      ctx.quadraticCurveTo(x, y, x+rr, y);
+    };
+
+    const drawHeart = (cx, cy, size)=>{
+      const s = size;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy + s*0.35);
+      ctx.bezierCurveTo(cx - s*0.5, cy - s*0.15, cx - s, cy + s*0.4, cx, cy + s);
+      ctx.bezierCurveTo(cx + s, cy + s*0.4, cx + s*0.5, cy - s*0.15, cx, cy + s*0.35);
+      ctx.closePath();
+      ctx.fillStyle = '#E53935';
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#8A1C1C';
+      ctx.stroke();
+    };
+
+    const drawPanel = (x, role, player, borderColor)=>{
+      // Panel box (white bg, player-colored border)
       ctx.save();
-      ctx.globalAlpha = 0.7;
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.fillRect(x,y,panelW,panelH);
-      ctx.globalAlpha = 1;
-      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.strokeRect(x+0.5,y+0.5,panelW-1,panelH-1);
+      roundRect(x, y, panelW, panelH, 16);
+      ctx.fillStyle = panelBg; ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = borderColor; ctx.stroke();
+      ctx.restore();
+
+      // Column anchors
+      const leftPad = x + 14;
+      const infoLeft = leftPad + 70; // all info text (Life/Gun/Ammo) aligns to this left edge
+
+      // Top row: Life label + hearts (bigger, filled)
+      const lives = Math.max(0, (player.lives|0));
+      const maxIcons = Math.min(8, lives);
+      const lifeFontPx = 24; // bigger text per request
+      const heartSize = lifeFontPx; // heart height matches Life text height
+      const spacing = heartSize + 4; // center-to-center spacing based on size
+      const rowY = y + 12;
+      ctx.save();
+      ctx.fillStyle = textColor;
+      ctx.font = lifeFontPx + 'px Segoe UI, Arial, sans-serif';
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      const label = 'Life';
+      ctx.fillText(label, infoLeft, rowY);
+      const labelW = Math.ceil(ctx.measureText(label).width);
+      let rowX = infoLeft + labelW + 10;
+      for (let i=0;i<maxIcons;i++){
+        const cx = rowX + i*spacing + heartSize/2;
+        const cy = rowY + heartSize/2; // vertically center to text height
+        drawHeart(cx, cy, heartSize);
+      }
+      ctx.restore();
+
+      // Bottom content: Role (large), then Gun/Ammo on the right
+      ctx.save();
+      ctx.fillStyle = textColor;
+      ctx.font = '32px Segoe UI, Arial, sans-serif';
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.fillText(role, leftPad, y + 56);
+      ctx.restore();
+
+      const g = player.gun || {};
+      const ammo = (typeof g.ammo === 'number') ? g.ammo : '—';
+      const wname = g.name || 'Pistol';
+      ctx.save();
+      ctx.fillStyle = textColor;
+      // Make Gun/Ammo text bigger and align left with Life label column
+      ctx.font = '20px Segoe UI, Arial, sans-serif';
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.fillText('Gun: ' + wname, infoLeft, y + 56);
+      ctx.fillText('Ammo: ' + ammo, infoLeft, y + 84);
       ctx.restore();
     };
-    const drawText = (text,x,y,align,color,font)=>{
-      ctx.save(); ctx.font = font || '20px Segoe UI, Arial, sans-serif'; ctx.fillStyle = color||cUI; ctx.textAlign = align||'left'; ctx.textBaseline='top'; ctx.fillText(text,x,y); ctx.restore();
-    };
-    // Left (P1)
-    drawPanel(pad, pad, cP1);
-    drawText('P1', pad+10, pad+8, 'left', cP1, '22px Segoe UI, Arial, sans-serif');
-    drawText('Lives: ' + ((p1.lives|0)||0), pad+60, pad+8, 'left', cUI);
-    const g1 = p1.gun || {}; const wname1 = g1.name || 'pistol'; const ammo1 = (typeof g1.ammo==='number')? g1.ammo : '—';
-    drawText('Gun: ' + wname1 + '  Ammo: ' + ammo1, pad+10, pad+36, 'left', cUI);
-    // Right (P2)
-    const rx = cw - pad - panelW;
-    drawPanel(rx, pad, cP2);
-    drawText('P2', rx + panelW - 10, pad+8, 'right', cP2, '22px Segoe UI, Arial, sans-serif');
-    drawText('Lives: ' + ((p2.lives|0)||0), rx + panelW - 60, pad+8, 'right', cUI);
-    const g2 = p2.gun || {}; const wname2 = g2.name || 'pistol'; const ammo2 = (typeof g2.ammo==='number')? g2.ammo : '—';
-    drawText('Gun: ' + wname2 + '  Ammo: ' + ammo2, rx + panelW - 10, pad+36, 'right', cUI);
+
+    // Draw P1 bottom-left, P2 bottom-right inside world rectangle
+    drawPanel(worldRect.x + pad, 'P1', p1, colorP1);
+    drawPanel(worldRect.x + worldRect.w - pad - panelW, 'P2', p2, colorP2);
   };
 
   GameRenderer.prototype._drawGameOver = function(ctx, cw, ch, model){
