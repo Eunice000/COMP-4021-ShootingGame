@@ -248,7 +248,22 @@ io.on('connection', (socket) => {
         });
       }
 
-      const roomData = activeRooms.get(roomId);
+      // Check if room exists in activeRooms
+      let roomData = activeRooms.get(roomId);
+      
+      // If room doesn't exist in activeRooms, create it (for reconnection after room was closed)
+      if (!roomData) {
+        console.log('[server] Room not in activeRooms, creating new room data for:', roomId);
+        roomData = {
+          players: new Set(),
+          gameState: null,
+          readyPlayers: new Set(),
+          startRequests: new Set(),
+          playerAssignments: new Map(),
+          gameStarted: false // Reset gameStarted flag for new room session
+        };
+        activeRooms.set(roomId, roomData);
+      }
       
       // If room has gameStarted flag, don't allow new players to join
       if (roomData.gameStarted) {
@@ -409,16 +424,15 @@ io.on('connection', (socket) => {
           setTimeout(() => {
             console.log('[server] Step 2: Closing room:', roomId);
             
-            // Mark room as game started - this prevents new players from joining
-            roomData.gameStarted = true;
-            
             // Remove room from activeRooms - room is now closed
+            // This allows users to reconnect and create a new room session
             activeRooms.delete(roomId);
             
-            console.log('[server] Room closed after both players started game:', roomId, '- New players cannot join until room is fully cleaned up');
+            console.log('[server] Room closed after both players started game:', roomId, '- Room removed from activeRooms');
             
-            // Step 4: After room is closed, allow reconnection (room is deleted, so new connections can create new rooms)
+            // Step 4: After room is closed, allow reconnection
             // The room data is now gone, so users can reconnect and create new rooms
+            // When they reconnect, a new roomData will be created in join-room handler with gameStarted = false
             console.log('[server] Step 3: Room closed. Users can now reconnect and create new rooms.');
           }, 100); // Small delay to ensure disconnection is complete
         }, 200); // Delay to ensure both-players-ready event is received and processed
