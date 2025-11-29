@@ -381,30 +381,47 @@ io.on('connection', (socket) => {
       roomData.startRequests.add(socket.id);
       console.log('[server] startRequests size:', roomData.startRequests.size, 'players size:', roomData.players.size);
       
-      // If both players requested start, notify them to navigate and close the room
+      // If both players requested start, disconnect users first, then close room
       if (roomData.startRequests.size === 2 && roomData.players.size === 2) {
-        console.log('[server] Both players ready, sending both-players-ready to room', roomId);
+        console.log('[server] Both players ready, starting disconnect and room close sequence');
         
-        // Mark room as game started - this prevents new players from joining
-        roomData.gameStarted = true;
-        
-        // Send notification to players
+        // Step 1: Send notification to players (they will navigate to game.html)
         io.to(roomId).emit('both-players-ready', { roomId });
         
-        // Close the room immediately after both players start the game
-        // This prevents new players from joining while the game is in progress
+        // Step 2: Disconnect all players from the socket.io room FIRST
+        // This ensures users are disconnected before room is closed
         setTimeout(() => {
-          // Remove all players from the socket.io room (but keep them in roomData.players for game session)
-          roomData.players.forEach(playerSocketId => {
+          console.log('[server] Step 1: Disconnecting all players from room:', roomId);
+          const playerSocketIds = Array.from(roomData.players);
+          
+          playerSocketIds.forEach(playerSocketId => {
             const playerSocket = io.sockets.sockets.get(playerSocketId);
             if (playerSocket) {
+              // Disconnect from socket.io room
               playerSocket.leave(roomId);
-              // Keep socket.roomId - they need it to join game.html and send game data
+              // Clear roomId to prevent reconnection attempts
+              playerSocket.roomId = null;
+              console.log('[server] Disconnected player:', playerSocketId, 'from room:', roomId);
             }
           });
           
-          console.log('[server] Room closed after both players started game:', roomId, '- New players cannot join');
-        }, 100); // Small delay to ensure both-players-ready event is received
+          // Step 3: After disconnecting, close the room immediately
+          setTimeout(() => {
+            console.log('[server] Step 2: Closing room:', roomId);
+            
+            // Mark room as game started - this prevents new players from joining
+            roomData.gameStarted = true;
+            
+            // Remove room from activeRooms - room is now closed
+            activeRooms.delete(roomId);
+            
+            console.log('[server] Room closed after both players started game:', roomId, '- New players cannot join until room is fully cleaned up');
+            
+            // Step 4: After room is closed, allow reconnection (room is deleted, so new connections can create new rooms)
+            // The room data is now gone, so users can reconnect and create new rooms
+            console.log('[server] Step 3: Room closed. Users can now reconnect and create new rooms.');
+          }, 100); // Small delay to ensure disconnection is complete
+        }, 200); // Delay to ensure both-players-ready event is received and processed
       }
     } else {
       console.warn('[server] Room not found:', roomId);
