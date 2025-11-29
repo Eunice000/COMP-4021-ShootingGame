@@ -6,53 +6,48 @@
             name: "Pistol",
             color: "#000000",
             type: "pistol",
-            power: 2000,
-            recoil: 200,
-            cooldownMs: 600,
-            ammo: 8,
+            power: 2500, // Increased knockback for Gun Mayhem 2 feel
+            recoil: 250,
+            cooldownMs: 500, // Faster firing
+            ammo: 12, // More ammo
             sprite: "prototype/assets/game/guns/pistol_sprite.png",
-            // Align the grip top slightly below mid-height (renderer uses anchorGripTop)
-            anchorGripTop: 16, // source image is 48px tall; grip top ~16px from top
-            offset: {x: 10, y: 0}
+            offset: {x: 0, y: 2}
         },
         {
             id: 2,
             name: "Sniper",
             color: "#000000",
             type: "sniper",
-            power: 6000,
-            recoil: 600,
-            cooldownMs: 1500,
-            ammo: 4,
+            power: 8000, // Massive knockback - sends players flying
+            recoil: 800,
+            cooldownMs: 1800,
+            ammo: 3, // Less ammo but powerful
             sprite: "prototype/assets/game/guns/sniper_sprite.png",
-            anchorGripTop: 14, // image height ~32px; grip top around 14px
-            offset: {x: 60, y: 0}
+            offset: {x: 60, y: 2}
         },
         {
             id: 3,
             name: "Assault Rifle",
             color: "#000000",
             type: "AR",
-            power: 1800,
-            recoil: 200,
-            cooldownMs: 400,
-            ammo: 24,
+            power: 2200, // Good knockback
+            recoil: 250,
+            cooldownMs: 350, // Faster firing
+            ammo: 30, // More ammo
             sprite: "prototype/assets/game/guns/ar_sprite.png",
-            anchorGripTop: 22, // image height 48px; grip top near 22px
-            offset: {x: 30, y: 0}
+            offset: {x: 20, y: 2}
         },
         {
             id: 4,
             name: "SMG",
             color: "#000000",
             type: "SMG",
-            power: 600,
-            recoil: 100,
-            cooldownMs: 200,
-            ammo: 32,
+            power: 1000, // Lower knockback but high fire rate
+            recoil: 120,
+            cooldownMs: 150, // Very fast firing
+            ammo: 40, // Lots of ammo
             sprite: "prototype/assets/game/guns/smg_sprite.png",
-            anchorGripTop: 22, // image height 48px; grip top near 22px
-            offset: {x: 10, y: 0}
+            offset: {x: 10, y: 2}
         }
     ];
     window.GameData = window.GameData || {};
