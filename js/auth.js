@@ -14,6 +14,7 @@
   const pairup = document.getElementById('pairupContainer');
   const lobbyView = document.getElementById('lobbyView');
   const roomView = document.getElementById('roomView');
+  const findRoomsView = document.getElementById('findRoomsView');
   const currentUsernameEl = document.getElementById('currentUsername');
   const logoutBtn = document.getElementById('logoutBtn');
   const createRoomBtn = document.getElementById('createRoomBtn');
@@ -146,17 +147,15 @@
     });
   }
 
-  // Find Room: prompt user for ID then request a join (handled in lobby.js)
+  // Find Room: open the search/list panel instead of prompt
   if (findRoomBtn) {
     findRoomBtn.addEventListener('click', function(){
-      const want = (window.prompt && window.prompt('Enter Room ID')) || '';
-      const id = (want || '').trim();
-      if (!id) return;
-      if (lobbyView && roomView){
+      if (lobbyView && findRoomsView){
         lobbyView.classList.add('login-hidden');
-        roomView.classList.remove('login-hidden');
+        findRoomsView.classList.remove('login-hidden');
       }
-      window.dispatchEvent(new CustomEvent('roomJoinRequest', { detail: { id } }));
+      // Notify finder module to load/refresh rooms
+      window.dispatchEvent(new CustomEvent('findRoomsOpen'));
     });
   }
 

@@ -27,6 +27,24 @@
             </div>
         </div>
 
+        <!-- Find Rooms view (search + list) -->
+        <div id="findRoomsView" class="login-hidden" aria-live="polite">
+            <h1>Room</h1>
+            <div style="display:flex; gap:8px; align-items:center; margin:8px 0 12px 0;">
+                <input id="findRoomSearch" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Search room number" 
+                       style="flex:1; padding:8px 10px; font-size:16px;" aria-label="Search room number">
+                <button id="refreshRoomsBtn" class="primary-btn" aria-label="Refresh rooms">Refresh</button>
+            </div>
+            <div id="roomsList" role="list" 
+                 style="border:1px solid #ccc; border-radius:6px; padding:4px; max-height:220px; overflow-y:auto;">
+                <!-- Room rows rendered by findRooms.js -->
+            </div>
+            <div id="roomsEmpty" style="margin-top:8px; display:none;">No rooms found.</div>
+            <div style="margin-top:12px; display:flex; justify-content:flex-start;">
+                <button id="returnToLobbyBtn" class="primary-btn">Return</button>
+            </div>
+        </div>
+
         <!-- Room view (shown after create/join) -->
         <div id="roomView" class="room-view login-hidden" aria-live="polite">
             <h1 id="roomTitle">Room</h1>
@@ -79,6 +97,7 @@
     <script src="socket.io/socket.io.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/lobby.js"></script>
+    <script src="js/findRooms.js"></script>
     <!-- Netgame modules: input capture, simple renderer, and coordination -->
     <!-- Load prototype content data so the renderer can load images (background, players, guns, powerups) -->
     <script src="prototype/js/assets/GunsData.js"></script>

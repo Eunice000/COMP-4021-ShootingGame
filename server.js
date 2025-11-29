@@ -157,6 +157,21 @@ app.post('/api/rooms', async (req, res) => {
   res.json({ ok: true, room });
 });
 
+// List rooms (optional substring filter by id via ?q=digits)
+app.get('/api/rooms', async (req, res) => {
+  try{
+    const q = (req.query && req.query.q ? String(req.query.q) : '').trim();
+    const rooms = await readRooms();
+    const filtered = q ? rooms.filter(r => (r && typeof r.id === 'string' && r.id.includes(q))) : rooms;
+    // For privacy, only expose id and host and createdAt (omit players list as it may be stale)
+    const out = filtered.map(r => ({ id: r.id, host: r.host, createdAt: r.createdAt }));
+    res.json({ ok: true, rooms: out });
+  }catch(e){
+    console.error('GET /api/rooms error:', e);
+    res.status(500).json({ ok: false, error: 'failed to read rooms' });
+  }
+});
+
 // Get room by id
 app.get('/api/rooms/:id', async (req, res) => {
   const id = req.params.id;
