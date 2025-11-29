@@ -25,6 +25,32 @@
   let countdown = null; // NetCountdownState instance
   /** @type {any} */
   let gameOverState = null; // NetGameOverState instance
+  // ---- Background music control ----
+  const lobbyBgmEl = document.getElementById('BackgroundMusic');
+  let playingBgm = null;
+  try {
+    playingBgm = new Audio('music/playing.mp3');
+    playingBgm.preload = 'auto';
+    playingBgm.loop = true; // keep music going during long rounds
+    playingBgm.volume = 0.6;
+  } catch(e) { playingBgm = null; }
+  let musicMode = 'lobby'; // 'lobby' | 'playing'
+  function switchToLobbyMusic(){
+    if (musicMode === 'lobby') return;
+    // stop playing music
+    try { if (playingBgm){ playingBgm.pause(); playingBgm.currentTime = 0; } } catch(e){}
+    // resume lobby bgm
+    try { if (lobbyBgmEl && lobbyBgmEl.paused){ const p = lobbyBgmEl.play(); if (p && p.catch) p.catch(()=>{}); } } catch(e){}
+    musicMode = 'lobby';
+  }
+  function switchToPlayingMusic(){
+    if (musicMode === 'playing') return;
+    // pause lobby music
+    try { if (lobbyBgmEl){ lobbyBgmEl.pause(); } } catch(e){}
+    // start playing music
+    try { if (playingBgm){ playingBgm.currentTime = 0; const p = playingBgm.play(); if (p && p.catch) p.catch(()=>{}); } } catch(e){}
+    musicMode = 'playing';
+  }
 
   // Views
   const roomView = document.getElementById('roomView');
@@ -144,12 +170,16 @@
       if (sec === 0){
         // Allow inputs when GO is shown/hidden
         inputPaused = false;
+        // Switch bgm to in-game track when round truly begins
+        switchToPlayingMusic();
       }
     });
     // Game over with rematch phase streaming
     let goKeyHandler = null;
     let myDecision = 'waiting';
     socket.on('gameOver', (payload)=>{
+      // Immediately switch back to lobby music during Game Over phase
+      switchToLobbyMusic();
       // During game over, stop gameplay inputs; we handle keys manually
       stopInputLoop();
       inputPaused = true;
@@ -194,6 +224,7 @@
     });
     socket.on('forceLeave', ()=>{
       // In case forceLeave is emitted from other flows, ensure cleanup
+      switchToLobbyMusic();
       try { if (countdown && countdown.stop) countdown.stop(); } catch(e){}
       countdown = null;
       try { if (renderer && renderer.setGameOver) renderer.setGameOver(null); } catch(e){}
@@ -217,6 +248,7 @@
       /** @type {SimpleSocket|null} */
       const socket = getSocket();
       if (socket) socket.emit('leaveRoom');
+      switchToLobbyMusic();
       try { if (countdown && countdown.stop) countdown.stop(); } catch(e){}
       countdown = null;
       try { if (renderer && renderer.setGameOver) renderer.setGameOver(null); } catch(e){}
