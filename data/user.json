@@ -1,0 +1,32 @@
+{
+  "users": [
+    {
+      "name": "test12",
+      "passwordHash": "$2b$10$jiS0PGbBADEJZy8SMy8drOQso35GEB556h3wp7giGoJ7R6/FJptRu"
+    },
+    {
+      "name": "hihi",
+      "passwordHash": "$2b$10$G2fFWznaPTRx13ay7gw/vu8gI0u2AiUeoZY2A8Y2gR3lR4qIF8dY."
+    },
+    {
+      "name": "yo",
+      "passwordHash": "$2b$10$Y.wI06qFZoIwgiE6TFJZe.dV8V74VUJE3uHRXxyZQbgBTWJSfu.b."
+    },
+    {
+      "name": "test1",
+      "passwordHash": "$2b$10$0g/b7tnaUSiUNbpCKlPNPuV5NuHirlofcwFegOl4fn0WqIjOy0oAa"
+    },
+    {
+      "name": "123",
+      "passwordHash": "$2b$10$aZm7r6SfjLoeh39Xlwcpue6zaECKwd6tBDOKWW5SELrjDJRtCvMX2"
+    },
+    {
+      "name": "Samuel",
+      "passwordHash": "$2b$10$jNAKoCqXI9FvOAjKUAgfGeDIGpMPeM9gJ8nKUt3KVeQxOzD1QQA4C"
+    },
+    {
+      "name": "Sam",
+      "passwordHash": "$2b$10$sm5fYqg7ke3Pspz7UfoWCO3nhh8Q6Dt4gn468xGZwG9hdUSa5KFPu"
+    }
+  ]
+}

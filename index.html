@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Page Title</title>
+    <link rel="stylesheet" href="css/start_game.css">
+    <link rel="stylesheet" href="prototype/css/styles.css">
+    <script>
+        // 過濾瀏覽器擴展相關的錯誤訊息
+        (function() {
+            const originalError = console.error;
+            const originalWarn = console.warn;
+            const originalLog = console.log;
+            
+            // 檢查是否為擴展相關錯誤
+            const isExtensionError = (message) => {
+                if (!message) return false;
+                const msg = String(message).toLowerCase();
+                return msg.includes('message port closed') ||
+                       msg.includes('immersive translate') ||
+                       msg.includes('model not available') ||
+                       msg.includes('sync rules error') ||
+                       msg.includes('request timeout') ||
+                       msg.includes('failed to fetch') ||
+                       msg.includes('failed to load resource') ||
+                       msg.includes('err_network_changed') ||
+                       msg.includes('run cron task failed') ||
+                       msg.includes('content_script.js') ||
+                       msg.includes('content-script.js') ||
+                       msg.includes('assets.immersivetranslate.cn') ||
+                       msg.includes('analytics: sent') ||
+                       (msg.includes('404') && msg.includes('immersivetranslate'));
+            };
+            
+            // 過濾 Immersive Translate 和 message port 相關錯誤
+            const filterErrors = (args) => {
+                if (!args || args.length === 0) return false;
+                
+                // 檢查所有參數
+                for (let i = 0; i < args.length; i++) {
+                    const arg = args[i];
+                    if (isExtensionError(arg) || 
+                        (arg && typeof arg === 'object' && (
+                            isExtensionError(arg.message) ||
+                            isExtensionError(arg.toString()) ||
+                            (arg.stack && isExtensionError(arg.stack))
+                        ))) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+            
+            console.error = function(...args) {
+                if (!filterErrors(args)) {
+                    originalError.apply(console, args);
+                }
+            };
+            
+            console.warn = function(...args) {
+                if (!filterErrors(args)) {
+                    originalWarn.apply(console, args);
+                }
+            };
+            
+            // 過濾擴展相關的日誌
+            console.log = function(...args) {
+                if (!filterErrors(args)) {
+                    originalLog.apply(console, args);
+                }
+            };
+            
+            // 捕獲未處理的 Promise 拒絕
+            window.addEventListener('unhandledrejection', function(event) {
+                const reason = event.reason;
+                let reasonStr = '';
+                
+                if (typeof reason === 'string') {
+                    reasonStr = reason;
+                } else if (reason && reason.message) {
+                    reasonStr = reason.message;
+                } else if (reason && reason.toString) {
+                    reasonStr = reason.toString();
+                }
+                
+                if (isExtensionError(reasonStr) || 
+                    (reason && reason.stack && isExtensionError(reason.stack))) {
+                    event.preventDefault();
+                    return false;
+                }
+            });
+            
+            // 捕獲全局錯誤
+            window.addEventListener('error', function(event) {
+                if (event.message && isExtensionError(event.message)) {
+                    event.preventDefault();
+                    return false;
+                }
+                if (event.filename && isExtensionError(event.filename)) {
+                    event.preventDefault();
+                    return false;
+                }
+            }, true);
+        })();
+    </script>
+</head>
+
+<body>
+    <audio id="BackgroundMusic" src="/music/start_game_bgm.mp3"></audio>
+    <!-- Game canvas (hidden initially) -->
+    <canvas id="game" style="display: none;"></canvas>
+    <!-- start game  -->
+    <p style="background-image: url('/image/start_background.gif');"></p>
+    <div class="start-game" id="start-game" tabindex="0" role="button" aria-label="Start game">
+        <img id="startBtn" src="image/start_button.png" alt="start" height="200">
+        <p class="start-caption">Click to Start</p>
+    </div>
+    <!-- player pair-up panel (hidden until login) -->
+    <div class="pairup-container login-hidden" id="pairupContainer">
+        <h1>Player Pair Up</h1>
+        <div class="pairup-actions">
+            <div>
+                <button id="createRoomBtn" class="small-btn">Create Room</button>
+                <div id="createdRoom" class="created-room" aria-live="polite"></div>
+            </div>
+
+            <div>
+                <input type="text" id="findRoomInput" placeholder="Enter room number">
+                <button id="findRoomBtn" class="small-btn">Find Room</button>
+                <div id="foundRoom" class="found-room" aria-live="polite"></div>
+            </div>
+        </div>
+        <div style="margin-top:12px; display:flex; gap:8px; flex-direction: column; align-items: center;">
+            <button id="startGameBtn" class="small-btn" style="display: none; background-color: #4CAF50; color: white; font-weight: bold; padding: 12px 24px; font-size: 16px;">Start Game</button>
+            <button id="backToLoginBtn" class="small-btn">LOGOUT</button>
+        </div>
+    </div>
+    <!-- login  -->
+    <div class="login-container">
+        <button id="closeRegisterBtn" class="close-login-btn" aria-label="Back to Login">×</button>
+        <h1>LOGIN</h1>
+
+        <div class="input-group">
+            <label for="name">Name</label>
+            <input type="text" id="name" placeholder="enter your name">
+        </div>
+
+        <div class="input-group">
+            <label for="password">PASSWORD</label>
+            <input type="password" id="password" placeholder="password">
+        </div>
+
+        <button type="submit">SIGN IN</button>
+
+        <div class="divider">OR</div>
+
+
+        <div class="footer">
+            Don't have an account? <a href="#" id="registerLink">Register</a>
+        </div>
+    </div>
+    <script src="js/start_game.js"></script>
+    <script src="js/auth.js"></script>
+    <!-- Prototype game scripts -->
+    <!-- Configs -->
+    <script src="prototype/js/config/gameConfig.js"></script>
+    <script src="prototype/js/config/controlsConfig.js"></script>
+    <script src="prototype/js/config/contentConfig.js"></script>
+
+    <!-- Embedded content data -->
+    <script src="prototype/js/assets/GunsData.js"></script>
+    <script src="prototype/js/assets/PlayersData.js"></script>
+    <script src="prototype/js/assets/MapsData.js"></script>
+    <script src="prototype/js/assets/PowerUpsData.js"></script>
+
+    <!-- Content Loaders -->
+    <script src="prototype/js/guns/GunLoader.js"></script>
+    <script src="prototype/js/utils/RegistryLoader.js"></script>
+    <script src="prototype/js/players/PlayerLoader.js"></script>
+    <script src="prototype/js/powerups/PowerUpLoader.js"></script>
+
+    <!-- Core -->
+    <script src="prototype/js/core/Timer.js"></script>
+    <script src="prototype/js/core/StateMachine.js"></script>
+    <script src="prototype/js/core/Renderer.js"></script>
+    <script src="prototype/js/core/Physics.js"></script>
+    <script src="prototype/js/core/Collision.js"></script>
+    <script src="prototype/js/core/Input.js"></script>
+    <script src="prototype/js/core/Game.js"></script>
+
+    <!-- Entities -->
+    <script src="prototype/js/entities/Entity.js"></script>
+    <script src="prototype/js/entities/Platform.js"></script>
+    <script src="prototype/js/powerups/PowerUp.js"></script>
+    <script src="prototype/js/guns/Gun.js"></script>
+    <script src="prototype/js/players/Player.js"></script>
+    <script src="prototype/js/players/PlayerController.js"></script>
+    <script src="prototype/js/entities/Bullet.js"></script>
+
+    <!-- World -->
+    <script src="prototype/js/world/StageLoader.js"></script>
+    <script src="prototype/js/world/Stage.js"></script>
+
+    <!-- UI -->
+    <script src="prototype/js/ui/GameplayUI.js"></script>
+    <script src="prototype/js/ui/GameOverUi.js"></script>
+
+    <!-- States -->
+    <script src="prototype/js/states/CountdownState.js"></script>
+    <script src="prototype/js/states/GameplayState.js"></script>
+    <script src="prototype/js/states/GameOverState.js"></script>
+    <script src="prototype/js/states/BootState.js"></script>
+
+    <!-- Client game renderer (server-authoritative mode) -->
+    <script src="js/client-game-renderer.js"></script>
+    <!-- top-right alert trigger and centered alert -->
+    <button id="topRightBtn" class="top-right-btn" aria-label="Show alert">?</button>
+
+    <div id="centerAlert" class="center-alert" role="dialog" aria-modal="true" aria-hidden="true">
+        <div class="center-alert-inner">
+            <div class="center-alert-message">
+                <strong>Game description</strong>
+                <p class="muted">2D PvP platform shooter</p>
+                <ul>
+                    <strong>Controls:</strong> 
+                    <li>Arrow keys — move / jump / drop </li>
+                    <li><kbd>Z</kbd> — shoot</li>
+                    <strong>Flow:</strong> 
+                    <li>3-minute per game</li>
+                    <li>Collect items</li>
+                    <li>Win by killing or having the most lives when time expires</li>
+                </ul>
+            </div>
+            <button id="centerAlertClose" class="center-alert-close" aria-label="Close">×</button>
+        </div>
+    </div>
+
+    <script>
+    (function(){
+        const topBtn = document.getElementById('topRightBtn');
+        const alertBox = document.getElementById('centerAlert');
+        const alertClose = document.getElementById('centerAlertClose');
+        if (!topBtn || !alertBox) return;
+
+        function toggleAlert(){
+            const isVisible = alertBox.classList.contains('visible');
+            if (isVisible) {
+                alertBox.classList.remove('visible');
+                alertBox.setAttribute('aria-hidden','true');
+                topBtn.focus();
+            } else {
+                alertBox.classList.add('visible');
+                alertBox.setAttribute('aria-hidden','false');
+                const focusable = alertBox.querySelector('button');
+                if (focusable) focusable.focus();
+            }
+        }
+
+        topBtn.addEventListener('click', toggleAlert);
+        alertClose && alertClose.addEventListener('click', function(){
+            alertBox.classList.remove('visible');
+            alertBox.setAttribute('aria-hidden','true');
+            topBtn.focus();
+        });
+        document.addEventListener('keydown', (e)=>{
+            if (e.key === 'Escape' && alertBox.classList.contains('visible')) hideAlert();
+        });
+    })();
+    </script>
+    <script src="/socket.io/socket.io.js"></script>
+</body>
+
+</html>
