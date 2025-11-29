@@ -13,6 +13,8 @@
     this.latest = null; // latest snapshot
     this.running = false;
     this._raf = null;
+    // Track last snapshot bullets to detect new spawns for SFX
+    this._lastBulletsCount = 0;
     // Optional art assets
     this.images = {
       bg: null,
@@ -22,6 +24,8 @@
       guns: {}      // id -> { img: HTMLImageElement, offset: {x:number,y:number} }
     };
     this._initAssets();
+    // Audio: simple pool for overlapping gun shot sounds
+    this._initAudio();
     // Game over overlay model
     this.gameOver = null; // { winner:number|null, stats:{p1:{kills,deaths,pickups},p2:{...}} }
   }
@@ -40,6 +44,13 @@
   }
 
   GameRenderer.prototype.setSnapshot = function(snap){
+    // Detect new bullet spawns by comparing counts
+    try {
+      const prevCount = (this.latest && Array.isArray(this.latest.bullets)) ? this.latest.bullets.length : 0;
+      const nextCount = (snap && Array.isArray(snap.bullets)) ? snap.bullets.length : 0;
+      const spawned = Math.max(0, nextCount - prevCount);
+      if (spawned > 0) this._playGunShot(spawned);
+    } catch(e) { /* ignore SFX errors */ }
     this.latest = snap;
   };
   GameRenderer.prototype.setGameOver = function(data){
@@ -301,6 +312,39 @@
       }
     } catch(e) {
       // Ignore asset errors in classroom setting
+    }
+  };
+
+  GameRenderer.prototype._initAudio = function(){
+    try {
+      const src = 'sound_effect/gun_shot.mp3';
+      const poolSize = 6;
+      const pool = [];
+      for (let i=0;i<poolSize;i++){
+        const a = new Audio(src);
+        a.preload = 'auto';
+        a.volume = 0.5; // comfortable default
+        pool.push(a);
+      }
+      this._sfx = { gun: { pool, idx: 0 } };
+    } catch(e) {
+      this._sfx = { gun: { pool: [], idx: 0 } };
+    }
+  };
+
+  GameRenderer.prototype._playGunShot = function(times){
+    const gun = this._sfx && this._sfx.gun;
+    if (!gun || !Array.isArray(gun.pool) || gun.pool.length === 0) return;
+    const n = Math.max(1, times|0);
+    for (let k=0;k<n;k++){
+      const a = gun.pool[gun.idx % gun.pool.length];
+      gun.idx = (gun.idx + 1) % gun.pool.length;
+      try {
+        // restart and play
+        a.currentTime = 0;
+        const p = a.play();
+        if (p && typeof p.catch === 'function') p.catch(()=>{});
+      } catch(e) { /* ignore */ }
     }
   };
 
