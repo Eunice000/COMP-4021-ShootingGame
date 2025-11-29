@@ -1,0 +1,350 @@
+
+(function(){
+  const WORLD_W = 1920;
+  const WORLD_H = 1080;
+
+  function GameRenderer(canvas){
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.latest = null; // latest snapshot
+    this.running = false;
+    this._raf = null;
+    // Optional art assets
+    this.images = {
+      bg: null,
+      p1: null,
+      p2: null,
+      powerUps: {}, // id -> HTMLImageElement
+      guns: {}      // id -> { img: HTMLImageElement, offset: {x:number,y:number} }
+    };
+    this._initAssets();
+    // Game over overlay model
+    this.gameOver = null; // { winner:number|null, stats:{p1:{kills,deaths,pickups},p2:{...}} }
+  }
+
+  GameRenderer.prototype.setSnapshot = function(snap){
+    this.latest = snap;
+  };
+  GameRenderer.prototype.setGameOver = function(data){
+    this.gameOver = data || {};
+  };
+
+  GameRenderer.prototype.start = function(){
+    if (this.running) return;
+    this.running = true;
+    const loop = ()=>{
+      if (!this.running) return;
+      this.render();
+      this._raf = requestAnimationFrame(loop);
+    };
+    this._raf = requestAnimationFrame(loop);
+  };
+
+  GameRenderer.prototype.stop = function(){
+    this.running = false;
+    if (this._raf) cancelAnimationFrame(this._raf);
+    this._raf = null;
+  };
+
+  GameRenderer.prototype.render = function(){
+    const ctx = this.ctx;
+    const cw = this.canvas.width;   // backing store size (we set to CSS*DPR)
+    const ch = this.canvas.height;
+
+    // Letterbox scale to keep 1920x1080 world centered
+    const scale = Math.min(cw / WORLD_W, ch / WORLD_H);
+    const drawW = WORLD_W * scale;
+    const drawH = WORLD_H * scale;
+    const offX = Math.floor((cw - drawW) / 2);
+    const offY = Math.floor((ch - drawH) / 2);
+
+    // Clear entire canvas
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.clearRect(0,0,cw,ch);
+
+    // Background bars (optional): fill with black outside world
+    ctx.fillStyle = '#000';
+    // top bar
+    if (offY > 0) ctx.fillRect(0, 0, cw, offY);
+    // bottom bar
+    if (offY > 0) ctx.fillRect(0, offY + drawH, cw, ch - (offY + drawH));
+    // left bar
+    if (offX > 0) ctx.fillRect(0, 0, offX, ch);
+    // right bar
+    if (offX > 0) ctx.fillRect(offX + drawW, 0, cw - (offX + drawW), ch);
+
+    // Transform to world space centered
+    ctx.setTransform(scale, 0, 0, scale, offX, offY);
+
+    // World background (use snapshot background if provided)
+    const snap = this.latest;
+    const bgColor = (snap && snap.colors && snap.colors.canvas) || '#FFFFFF';
+    // Prefer dynamic background path from server snapshot; fall back to preloaded image or color
+    const bgPath = snap && snap.background;
+    if (bgPath) {
+      // Cache by URL to avoid reloading every frame
+      if (!this.images.bg || this.images.bg._src !== bgPath) {
+        const img = new Image();
+        img.src = bgPath;
+        img._src = bgPath;
+        this.images.bg = img;
+      }
+    }
+    if (this.images.bg && this.images.bg.complete) {
+      ctx.drawImage(this.images.bg, 0, 0, WORLD_W, WORLD_H);
+    } else {
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+    }
+
+    // Draw background image not supported yet; placeholder solid bg
+
+    // Do NOT render platform rectangles. Platforms are baked into the background image.
+
+    if (snap){
+      // Draw players (match prototype scale 80x120)
+      const players = snap.players || [];
+      for (let i=0;i<players.length;i++){
+        const p = players[i];
+        if (!p) continue;
+        const px = (p.x|0); const py = (p.y|0);
+        const w = (p.w|0) || 80; const h = (p.h|0) || 120;
+        const img = (i===0 ? this.images.p1 : this.images.p2);
+        if (img && img.complete) {
+          // Draw sprite aligned to top-left of physics box; flip horizontally if facing left
+          const drawX = px;
+          const drawY = py;
+          if (p.facing && p.facing < 0) {
+            ctx.save();
+            ctx.translate(drawX + w, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(img, 0, drawY, w, h);
+            ctx.restore();
+          } else {
+            ctx.drawImage(img, drawX, drawY, w, h);
+          }
+        } else {
+          const color = (snap.colors && (i===0 ? snap.colors.p1 : snap.colors.p2)) || (i===0 ? '#FF4040' : '#99CCFF');
+          ctx.fillStyle = color;
+          ctx.fillRect(px, py, w, h);
+        }
+        // Draw current gun sprite from GunsData if available, at mid-height on the facing side,
+        // slightly inside the player box by 5px
+        if (p.gun){
+          const art = this._getGunArt(p.gun);
+          if (art && art.img && art.img.complete){
+            const gw = (art.img.naturalWidth || art.img.width || 40);
+            const gh = (art.img.naturalHeight || art.img.height || 20);
+            const off = art.offset || {x:0,y:0};
+            const gy = (py + Math.floor(h/2) - Math.floor(gh/2)) + (off.y|0);
+            if (p.facing && p.facing < 0){
+              // Facing left: flip horizontally around the player's left edge (px),
+              // and position so the gun sits 5px inside the player box.
+              ctx.save();
+              ctx.translate(px, 0);
+              ctx.scale(-1, 1);
+              // After transform, worldX = px - gxLocal - gw; target worldX = px + 5 + off.x
+              // => gxLocal = - (gw + 5 - off.x)
+              const gxLocal = -((gw + 5) - (off.x|0));
+              ctx.drawImage(art.img, gxLocal, gy, gw, gh);
+              ctx.restore();
+            } else {
+              // Facing right: draw so the gun sits 5px inside the right edge
+              const gx = (px + w - 5 - gw) + (off.x|0);
+              ctx.drawImage(art.img, gx, gy, gw, gh);
+            }
+          }
+        }
+        // Shield visual: blue circle around player when shield is active
+        if ((p.shieldMs|0) > 0){
+          const cx = px + w/2;
+          const cy = py + h/2;
+          const r = Math.max(w, h) * 0.65;
+          ctx.save();
+          ctx.lineWidth = 6;
+          ctx.strokeStyle = 'rgba(80,160,255,0.9)';
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI*2);
+          ctx.stroke();
+          ctx.restore();
+        }
+        // facing indicator
+        ctx.fillStyle = '#111';
+        const indX = px + (p.facing>0 ? (w - 2) : -2);
+        ctx.fillRect(indX, py + 14, 4, 14);
+
+        // lives text
+        ctx.fillStyle = '#111';
+        ctx.font = '22px monospace';
+        ctx.fillText('L'+(p.lives||0), px, py - 8);
+      }
+
+      // Draw bullets
+      const bullets = snap.bullets || [];
+      ctx.fillStyle = '#222';
+      for (let i=0;i<bullets.length;i++){
+        const b = bullets[i];
+        if (!b) continue;
+        ctx.fillRect((b.x|0)-6, (b.y|0)-2, 12, 4);
+      }
+
+      // Draw power-ups using sprite from PowerUpsData.js when available
+      if (Array.isArray(snap.powerUps)){
+        for (let i=0;i<snap.powerUps.length;i++){
+          const pu = snap.powerUps[i];
+          if (!pu) continue;
+          const img = pu.type && this.images.powerUps ? this.images.powerUps[pu.type] : null;
+          const w = (pu.w|0) || 40, h = (pu.h|0) || 40;
+          const x = (pu.x|0), y = (pu.y|0);
+          if (img && img.complete){
+            ctx.drawImage(img, x, y, w, h);
+          } else {
+            ctx.fillStyle = '#FFC107';
+            ctx.fillRect(x, y, w, h);
+          }
+        }
+      }
+    }
+
+    // UI in screen space: time left top-center
+    ctx.setTransform(1,0,0,1,0,0);
+    this._drawHUD(ctx, cw, ch, offY);
+
+    // Game Over overlay if present
+    if (this.gameOver){
+      this._drawGameOver(ctx, cw, ch, this.gameOver);
+    }
+  };
+
+  GameRenderer.prototype._initAssets = function(){
+    try {
+      const GD = window.GameData || {};
+      // Players
+      const players = Array.isArray(GD.players) ? GD.players : [];
+      const p1 = players.find(p => p && p.id === 'p1');
+      const p2 = players.find(p => p && p.id === 'p2');
+      if (p1 && p1.sprite){ const i1 = new Image(); i1.src = p1.sprite; this.images.p1 = i1; }
+      if (p2 && p2.sprite){ const i2 = new Image(); i2.src = p2.sprite; this.images.p2 = i2; }
+      // PowerUps
+      const pus = Array.isArray(GD.powerUps) ? GD.powerUps : [];
+      for (let i=0;i<pus.length;i++){
+        const pu = pus[i];
+        if (pu && pu.id && pu.sprite){ const img = new Image(); img.src = pu.sprite; this.images.powerUps[pu.id] = img; }
+      }
+      // Guns
+      const guns = Array.isArray(GD.guns) ? GD.guns : [];
+      for (let i=0;i<guns.length;i++){
+        const g = guns[i];
+        if (!g || typeof g.id !== 'number' || !g.sprite) continue;
+        const img = new Image(); img.src = g.sprite;
+        this.images.guns[g.id] = { img, offset: (g.offset || {x:0,y:0}) };
+      }
+    } catch(e) {
+      // Ignore asset errors in classroom setting
+    }
+  };
+
+  GameRenderer.prototype._getGunArt = function(gunSnap){
+    // Prefer by id
+    if (gunSnap && typeof gunSnap.id === 'number'){
+      return this.images.guns[gunSnap.id] || null;
+    }
+    // Fallback by name or type
+    const guns = this.images.guns;
+    if (!guns) return null;
+    const keys = Object.keys(guns);
+    for (let k=0;k<keys.length;k++){
+      const entry = guns[keys[k]];
+      // No reverse map of names/types; cannot reliably match
+    }
+    // Default to pistol (id 1) if present
+    return guns[1] || null;
+  };
+
+  // ---- UI drawing (mirrors prototype GameplayUI and GameOverUi in spirit) ----
+  GameRenderer.prototype._drawHUD = function(ctx, cw, ch, offY){
+    const snap = this.latest || {};
+    const players = snap.players || [];
+    const p1 = players[0] || {}; const p2 = players[1] || {};
+    // Colors similar to config
+    const cP1 = '#FF4040';
+    const cP2 = '#99CCFF';
+    const cUI = '#111';
+
+    // Round timer big at top center (prototype style)
+    ctx.save();
+    ctx.font = '80px Segoe UI, Arial, sans-serif, monospace';
+    ctx.fillStyle = cUI;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const t = Math.max(0, Math.ceil(snap.timeLeft||0)) + '';
+    ctx.fillText(t, Math.floor(cw/2), 16);
+    ctx.restore();
+
+    const pad = 16; const panelW = 240; const panelH = 65;
+    // Panel helper
+    const drawPanel = (x,y,color)=>{
+      ctx.save();
+      ctx.globalAlpha = 0.7;
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.fillRect(x,y,panelW,panelH);
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.strokeRect(x+0.5,y+0.5,panelW-1,panelH-1);
+      ctx.restore();
+    };
+    const drawText = (text,x,y,align,color,font)=>{
+      ctx.save(); ctx.font = font || '20px Segoe UI, Arial, sans-serif'; ctx.fillStyle = color||cUI; ctx.textAlign = align||'left'; ctx.textBaseline='top'; ctx.fillText(text,x,y); ctx.restore();
+    };
+    // Left (P1)
+    drawPanel(pad, pad, cP1);
+    drawText('P1', pad+10, pad+8, 'left', cP1, '22px Segoe UI, Arial, sans-serif');
+    drawText('Lives: ' + ((p1.lives|0)||0), pad+60, pad+8, 'left', cUI);
+    const g1 = p1.gun || {}; const wname1 = g1.name || 'pistol'; const ammo1 = (typeof g1.ammo==='number')? g1.ammo : '—';
+    drawText('Gun: ' + wname1 + '  Ammo: ' + ammo1, pad+10, pad+36, 'left', cUI);
+    // Right (P2)
+    const rx = cw - pad - panelW;
+    drawPanel(rx, pad, cP2);
+    drawText('P2', rx + panelW - 10, pad+8, 'right', cP2, '22px Segoe UI, Arial, sans-serif');
+    drawText('Lives: ' + ((p2.lives|0)||0), rx + panelW - 60, pad+8, 'right', cUI);
+    const g2 = p2.gun || {}; const wname2 = g2.name || 'pistol'; const ammo2 = (typeof g2.ammo==='number')? g2.ammo : '—';
+    drawText('Gun: ' + wname2 + '  Ammo: ' + ammo2, rx + panelW - 10, pad+36, 'right', cUI);
+  };
+
+  GameRenderer.prototype._drawGameOver = function(ctx, cw, ch, model){
+    // Dim
+    ctx.save(); ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(0,0,cw,ch); ctx.restore();
+    // Title
+    const winner = (typeof model.winner === 'number') ? model.winner : -1;
+    const title = (winner === -1) ? 'Draw!' : (winner === 0 ? 'Player 1 Wins!' : 'Player 2 Wins!');
+    ctx.save(); ctx.font = '84px Segoe UI, Arial, sans-serif'; ctx.fillStyle = '#fff'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(title, cw/2, ch*0.20);
+    ctx.restore();
+    // Stats panel
+    const panelW = 700, panelH = 180; const px = Math.floor((cw-panelW)/2); const py = Math.floor(ch*0.28);
+    ctx.save(); ctx.globalAlpha=0.85; ctx.fillStyle='#fff'; ctx.fillRect(px,py,panelW,panelH); ctx.globalAlpha=1; ctx.strokeStyle='#111'; ctx.lineWidth=3; ctx.strokeRect(px+0.5,py+0.5,panelW-1,panelH-1); ctx.restore();
+    // Headers
+    const drawHdr=(text,x)=>{ ctx.save(); ctx.font='24px Segoe UI, Arial, sans-serif'; ctx.fillStyle='#111'; ctx.fillText(text,x,py+30); ctx.restore(); };
+    drawHdr('Player', px+30); drawHdr('Kills', px+260); drawHdr('Deaths', px+360); drawHdr('K/D', px+480); drawHdr('Pickups', px+560);
+    const s1 = (model.stats && model.stats.p1) || {kills:0,deaths:0,pickups:0};
+    const s2 = (model.stats && model.stats.p2) || {kills:0,deaths:0,pickups:0};
+    const rows = (winner===0) ? [{l:'P1',c:'#FF4040',s:s1},{l:'P2',c:'#99CCFF',s:s2}] : (winner===1) ? [{l:'P2',c:'#99CCFF',s:s2},{l:'P1',c:'#FF4040',s:s1}] : [{l:'P1',c:'#FF4040',s:s1},{l:'P2',c:'#99CCFF',s:s2}];
+    const kd = (k,d)=>{ const deaths=d|0; const kills=k|0; if (deaths===0) return kills>0?'∞':'0.00'; return (Math.round((kills/deaths)*100)/100).toFixed(2); };
+    for (let r=0;r<rows.length;r++){
+      const rowY = py+70 + r*80; const row = rows[r];
+      ctx.fillStyle=row.c; ctx.fillRect(px+30,rowY-18,20,20);
+      ctx.save(); ctx.font='28px Segoe UI, Arial, sans-serif'; ctx.fillStyle='#111'; ctx.fillText(row.l, px+60,rowY); ctx.restore();
+      const drawVal=(text,x)=>{ ctx.save(); ctx.font='28px Segoe UI, Arial, sans-serif'; ctx.fillStyle='#111'; ctx.fillText(text,x,rowY); ctx.restore(); };
+      drawVal(String(row.s.kills|0), px+270);
+      drawVal(String(row.s.deaths|0), px+380);
+      drawVal(kd(row.s.kills,row.s.deaths), px+480);
+      drawVal(String(row.s.pickups|0), px+580);
+      // Rank
+      const rankText = (winner === -1) ? (r===0?'T-1':'T-1') : (r===0?'1st':'2nd');
+      ctx.save(); ctx.font='24px Segoe UI, Arial, sans-serif'; ctx.fillStyle='#555'; ctx.fillText(rankText, px+panelW-80, rowY); ctx.restore();
+    }
+    // Instruction
+    ctx.save(); ctx.font='24px Segoe UI, Arial, sans-serif'; ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.fillText('Returning to room…', cw/2, py+panelH+50); ctx.restore();
+  };
+
+  window.GameRenderer = GameRenderer;
+})();

@@ -5,6 +5,7 @@ const bcrypt = require('bcrypt');
 const bodyParser = require('body-parser');
 const http = require('http');
 const { Server } = require('socket.io');
+const { GameEngine } = require(path.join(__dirname, 'server', 'gameEngine'));
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -200,7 +201,8 @@ function tryStartCountdown(room){
       } else {
         clearCountdown(room);
         room.status = 'playing';
-        io.to(room.id).emit('gameStart', { roomId: room.id });
+        // Start authoritative game for this room
+        startRoomGame(room);
       }
     }, 1000);
   }
@@ -209,6 +211,8 @@ function tryStartCountdown(room){
 function removeRoom(id){
   const room = roomsById.get(id);
   if (!room) return;
+  // stop engine if running
+  stopRoomGame(room);
   clearCountdown(room);
   roomsById.delete(id);
 }
@@ -261,7 +265,8 @@ io.on('connection', (socket)=>{
         status: 'lobby',
         players: [],
         countdown: null,
-        countdownTimer: null
+        countdownTimer: null,
+        engine: null
       };
       roomsById.set(roomId, room);
     }
@@ -289,6 +294,11 @@ io.on('connection', (socket)=>{
     removePlayerFromRoom(room, socket.id);
     socket.leave(room.id);
     socket.data.roomId = null;
+    // If a game is running, stop it and force leave everyone back to lobby
+    if (room.status === 'playing'){
+      forceLeaveRoom(room);
+      return;
+    }
     if (room.players.length === 0){
       removeRoom(room.id);
     } else {
@@ -332,7 +342,57 @@ io.on('connection', (socket)=>{
     // Keep original requirement: any disconnect makes both leave
     forceLeaveRoom(room);
   });
+
+  // Runtime input from clients during gameplay
+  socket.on('input', (pkt)=>{
+    const roomId = socket.data.roomId;
+    if (!roomId) return;
+    const room = roomsById.get(roomId);
+    if (!room || !room.engine) return;
+    room.engine.handleInputPacket(socket.id, pkt);
+  });
 });
 
 httpServer.listen(PORT, ()=> console.log(`Server running on http://localhost:${PORT}`));
 httpServer.on('error', (err) => console.error('Server error:', err));
+
+// ---- Game lifecycle helpers ----
+function startRoomGame(room){
+  // Assign roles by join order
+  const p1 = room.players[0];
+  const p2 = room.players[1];
+  if (!p1 || !p2){
+    room.status = 'lobby';
+    broadcastRoomUpdate(room);
+    return;
+  }
+  // Notify clients of their role
+  const s1 = io.sockets.sockets.get(p1.socketId);
+  const s2 = io.sockets.sockets.get(p2.socketId);
+  s1 && s1.emit('gameAssign', { role: 'p1', roomId: room.id });
+  s2 && s2.emit('gameAssign', { role: 'p2', roomId: room.id });
+
+  // Create and start engine
+  const engine = new GameEngine(__dirname);
+  room.engine = engine;
+  engine.assignRoles(p1.socketId, p2.socketId);
+  engine.setOnSnapshot((snap)=>{
+    io.to(room.id).emit('snapshot', snap);
+  });
+  engine.setOnGameOver(()=>{
+    io.to(room.id).emit('gameOver', {});
+    room.status = 'lobby';
+    // Clear players' ready state for next match
+    room.players = room.players.map(pl => ({ ...pl, ready: false }));
+    broadcastRoomUpdate(room);
+    stopRoomGame(room);
+  });
+  engine.start();
+}
+
+function stopRoomGame(room){
+  if (room && room.engine){
+    try{ room.engine.stop(); }catch(e){}
+    room.engine = null;
+  }
+}

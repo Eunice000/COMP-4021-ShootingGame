@@ -25,6 +25,8 @@
   function ensureSocket(){
     if (!socket){
       socket = io();
+      // Expose globally for netgame module
+      window.GAME_SOCKET = socket;
 
       socket.on('roomUpdate', (payload)=>{
         // payload: { id, host, status, players: [{name, ready}] }
@@ -52,6 +54,8 @@
         if (playerBox){ playerBox.innerHTML = ''; }
         if (roomCountdown){ roomCountdown.textContent = ''; }
         showLobbyView();
+        // Clear global socket reference (will be recreated later if needed)
+        try { if (window.GAME_SOCKET === socket) window.GAME_SOCKET = null; } catch(e){}
       });
 
       socket.on('errorMsg', ({ error })=>{
@@ -134,6 +138,7 @@
       if (playerBox){ playerBox.innerHTML = ''; }
       if (roomCountdown){ roomCountdown.textContent = ''; }
       showLobbyView();
+      try { if (window.GAME_SOCKET === socket) window.GAME_SOCKET = null; } catch(e){}
     });
   }
 
@@ -162,6 +167,7 @@
   window.addEventListener('userLogout', ()=>{
     if (joinedRoomId){ ensureSocket().emit('leaveRoom'); }
     showLobbyView();
+    try { if (window.GAME_SOCKET === socket) window.GAME_SOCKET = null; } catch(e){}
   });
   window.addEventListener('loginSuccess', ()=>{ ensureSocket(); });
 })();
