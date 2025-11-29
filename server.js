@@ -99,10 +99,15 @@ function generateRoomId(existing){
  * {
  *   id: string,
  *   host: string,
- *   status: 'lobby'|'countdown'|'playing',
+ *   status: 'lobby'|'countdown'|'playing'|'gameover',
  *   players: [ { name: string, socketId: string, ready: boolean } ],
  *   countdown: number | null,
- *   countdownTimer: NodeJS.Timeout | null
+ *   countdownTimer: NodeJS.Timeout | null,
+ *   engine?: GameEngine | null,
+ *   // Game over / rematch phase
+ *   gameOverPayload?: any,
+ *   rematch?: { p1: 'waiting'|'ready'|'left', p2: 'waiting'|'ready'|'left', deadline: number },
+ *   rematchTimer?: NodeJS.Timeout | null
  * }
  */
 const roomsById = new Map();
@@ -122,7 +127,11 @@ app.post('/api/rooms', async (req, res) => {
     status: 'lobby',
     players: [],
     countdown: null,
-    countdownTimer: null
+    countdownTimer: null,
+    engine: null,
+    gameOverPayload: null,
+    rematch: null,
+    rematchTimer: null
   });
   res.json({ ok: true, room });
 });
@@ -187,6 +196,15 @@ function clearCountdown(room){
   if (room.status === 'countdown') room.status = 'lobby';
 }
 
+function clearRematch(room){
+  if (room.rematchTimer){
+    clearInterval(room.rematchTimer);
+    room.rematchTimer = null;
+  }
+  room.rematch = null;
+  room.gameOverPayload = null;
+}
+
 function tryStartCountdown(room){
   if (room.status !== 'lobby') return;
   if (room.players.length === 2 && room.players.every(p => p.ready)){
@@ -214,6 +232,7 @@ function removeRoom(id){
   // stop engine if running
   stopRoomGame(room);
   clearCountdown(room);
+  clearRematch(room);
   roomsById.delete(id);
 }
 
@@ -295,7 +314,8 @@ io.on('connection', (socket)=>{
     socket.leave(room.id);
     socket.data.roomId = null;
     // If a game is running, stop it and force leave everyone back to lobby
-    if (room.status === 'playing'){
+    if (room.status === 'playing' || room.status === 'gameover'){
+      clearRematch(room);
       forceLeaveRoom(room);
       return;
     }
@@ -340,6 +360,7 @@ io.on('connection', (socket)=>{
     const room = roomsById.get(roomId);
     if (!room) return;
     // Keep original requirement: any disconnect makes both leave
+    clearRematch(room);
     forceLeaveRoom(room);
   });
 
@@ -350,6 +371,60 @@ io.on('connection', (socket)=>{
     const room = roomsById.get(roomId);
     if (!room || !room.engine) return;
     room.engine.handleInputPacket(socket.id, pkt);
+  });
+
+  // Rematch decision from client during Game Over phase
+  socket.on('rematchChoice', ({ choice }) => {
+    const roomId = socket.data.roomId;
+    if (!roomId) return;
+    const room = roomsById.get(roomId);
+    if (!room || room.status !== 'gameover' || !room.rematch) return;
+    const p1 = room.players[0];
+    const p2 = room.players[1];
+    const idx = (p1 && p1.socketId === socket.id) ? 0 : ((p2 && p2.socketId === socket.id) ? 1 : -1);
+    if (idx === -1) return;
+    const otherIdx = (idx === 0 ? 1 : 0);
+    const youKey = (idx === 0 ? 'p1' : 'p2');
+    const otherKey = (otherIdx === 0 ? 'p1' : 'p2');
+    const yourState = room.rematch[youKey];
+    const otherState = room.rematch[otherKey];
+    const c = (choice === 'left') ? 'left' : (choice === 'ready' ? 'ready' : null);
+    if (!c) return;
+
+    // Apply rules
+    if (yourState === 'left') return; // already left; final
+
+    if (c === 'left'){
+      // New rule: if you had pressed Z (ready), you may press X to leave
+      // when the opponent has already left. Otherwise, keep your Ready.
+      if (yourState === 'ready' && otherState !== 'left'){
+        return;
+      }
+      // Mark this player as left; do not immediately force-return just this player.
+      // Both players must press X or the timer must expire to return to room.
+      room.rematch[youKey] = 'left';
+    } else if (c === 'ready'){
+      // If the other has already left, you can no longer ready up
+      if (otherState === 'left'){
+        return; // only X is allowed now for the remaining player
+      }
+      // Otherwise, allow ready regardless of the other player's state
+      room.rematch[youKey] = 'ready';
+    }
+
+    // Check resolution
+    const a = room.rematch.p1;
+    const b = room.rematch.p2;
+    if (a === 'ready' && b === 'ready'){
+      // Restart game
+      endRematchAndRestart(room);
+      return;
+    }
+    // If both have left (both X), end rematch for both players
+    if (a === 'left' && b === 'left'){
+      endRematchReturnToRoom(room);
+      return;
+    }
   });
 });
 
@@ -379,13 +454,27 @@ function startRoomGame(room){
   engine.setOnSnapshot((snap)=>{
     io.to(room.id).emit('snapshot', snap);
   });
-  engine.setOnGameOver(()=>{
-    io.to(room.id).emit('gameOver', {});
-    room.status = 'lobby';
-    // Clear players' ready state for next match
-    room.players = room.players.map(pl => ({ ...pl, ready: false }));
-    broadcastRoomUpdate(room);
+  engine.setOnRoundCountdown((sec)=>{
+    io.to(room.id).emit('roundCountdown', { seconds: sec|0 });
+  });
+  engine.setOnGameOver((payload)=>{
+    // Enter gameover/rematch phase
     stopRoomGame(room);
+    room.status = 'gameover';
+    room.gameOverPayload = payload || {};
+    const now = Date.now();
+    room.rematch = { p1: 'waiting', p2: 'waiting', deadline: now + 15000 };
+    // Periodically emit gameOver with rematch remaining time
+    if (room.rematchTimer) { clearInterval(room.rematchTimer); room.rematchTimer = null; }
+    room.rematchTimer = setInterval(()=>{
+      const remaining = Math.max(0, (room.rematch.deadline - Date.now()));
+      const out = { ...room.gameOverPayload, rematch: { p1: room.rematch.p1, p2: room.rematch.p2, remainingMs: remaining } };
+      io.to(room.id).emit('gameOver', out);
+      // Resolve by timeout
+      if (remaining <= 0){
+        endRematchReturnToRoom(room);
+      }
+    }, 300);
   });
   engine.start();
 }
@@ -395,4 +484,26 @@ function stopRoomGame(room){
     try{ room.engine.stop(); }catch(e){}
     room.engine = null;
   }
+}
+
+function endRematchReturnToRoom(room){
+  if (!room) return;
+  if (room.rematchTimer){ clearInterval(room.rematchTimer); room.rematchTimer = null; }
+  room.status = 'lobby';
+  // Clear players' ready state for next match
+  room.players = room.players.map(pl => ({ ...pl, ready: false }));
+  // Notify clients to return to room; also send a final gameOver with 0 remaining
+  const out = { ...(room.gameOverPayload||{}), rematch: { p1: room.rematch?.p1 || 'waiting', p2: room.rematch?.p2 || 'waiting', remainingMs: 0 } };
+  io.to(room.id).emit('gameOver', out);
+  broadcastRoomUpdate(room);
+  clearRematch(room);
+}
+
+function endRematchAndRestart(room){
+  if (!room) return;
+  if (room.rematchTimer){ clearInterval(room.rematchTimer); room.rematchTimer = null; }
+  clearRematch(room);
+  // Restart game immediately
+  room.status = 'playing';
+  startRoomGame(room);
 }

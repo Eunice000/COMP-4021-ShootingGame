@@ -11,7 +11,9 @@
             cooldownMs: 600,
             ammo: 8,
             sprite: "prototype/assets/game/guns/pistol_sprite.png",
-            offset: {x: 0, y: 0}
+            // Align the grip top slightly below mid-height (renderer uses anchorGripTop)
+            anchorGripTop: 16, // source image is 48px tall; grip top ~16px from top
+            offset: {x: 10, y: 0}
         },
         {
             id: 2,
@@ -23,7 +25,8 @@
             cooldownMs: 1500,
             ammo: 4,
             sprite: "prototype/assets/game/guns/sniper_sprite.png",
-            offset: {x: 60, y: 2}
+            anchorGripTop: 14, // image height ~32px; grip top around 14px
+            offset: {x: 60, y: 0}
         },
         {
             id: 3,
@@ -35,7 +38,8 @@
             cooldownMs: 400,
             ammo: 24,
             sprite: "prototype/assets/game/guns/ar_sprite.png",
-            offset: {x: 20, y: 2}
+            anchorGripTop: 22, // image height 48px; grip top near 22px
+            offset: {x: 30, y: 0}
         },
         {
             id: 4,
@@ -47,7 +51,8 @@
             cooldownMs: 200,
             ammo: 32,
             sprite: "prototype/assets/game/guns/smg_sprite.png",
-            offset: {x: 10, y: 2}
+            anchorGripTop: 22, // image height 48px; grip top near 22px
+            offset: {x: 10, y: 0}
         }
     ];
     window.GameData = window.GameData || {};

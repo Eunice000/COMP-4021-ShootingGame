@@ -43,7 +43,7 @@
     this.latest = snap;
   };
   GameRenderer.prototype.setGameOver = function(data){
-    this.gameOver = data || {};
+    this.gameOver = data || null;
   };
 
   GameRenderer.prototype.start = function(){
@@ -168,29 +168,40 @@
           ctx.fillStyle = color;
           ctx.fillRect(px, py, w, h);
         }
-        // Draw current gun sprite from GunsData if available, at mid-height on the facing side,
-        // slightly inside the player box by 5px
+        // Draw current gun sprite from GunsData if available.
+        // Requirements:
+        // - Scale real-gun sprites to 2x
+        // - Place the gun so that its grip top aligns just below player's mid-height
+        // - Keep the gun about 3px inside the player edge on the facing side
         if (p.gun){
           const art = this._getGunArt(p.gun);
           if (art && art.img && art.img.complete){
-            const gw = (art.img.naturalWidth || art.img.width || 40);
-            const gh = (art.img.naturalHeight || art.img.height || 20);
+            const srcW = (art.img.naturalWidth || art.img.width || 40);
+            const srcH = (art.img.naturalHeight || art.img.height || 20);
+            const SCALE = 2; // render at double size
+            const gw = Math.round(srcW * SCALE);
+            const gh = Math.round(srcH * SCALE);
             const off = art.offset || {x:0,y:0};
-            const gy = (py + Math.floor(h/2) - Math.floor(gh/2)) + (off.y|0);
+            const anchorGripTop = (typeof art.anchorGripTop === 'number') ? art.anchorGripTop : Math.round(srcH/2);
+            // Desired world Y for the grip top is just below the player's vertical middle
+            const desiredGripTop = py + Math.floor(h/2) + 1;
+            // Convert anchor from source pixels to world with scaling
+            const gy = desiredGripTop - Math.floor(anchorGripTop * SCALE) + (off.y|0);
+            const INSET = 3;
             if (p.facing && p.facing < 0){
               // Facing left: flip horizontally around the player's left edge (px),
-              // and position so the gun sits 5px inside the player box.
+              // and position so the gun sits ~3px inside the player box.
               ctx.save();
               ctx.translate(px, 0);
               ctx.scale(-1, 1);
-              // After transform, worldX = px - gxLocal - gw; target worldX = px + 5 + off.x
-              // => gxLocal = - (gw + 5 - off.x)
-              const gxLocal = -((gw + 5) - (off.x|0));
+              // After transform, worldX = px - gxLocal - gw; target worldX = px + INSET + off.x
+              // => gxLocal = - (gw + INSET - off.x)
+              const gxLocal = -((gw + INSET) - (off.x|0));
               ctx.drawImage(art.img, gxLocal, gy, gw, gh);
               ctx.restore();
             } else {
-              // Facing right: draw so the gun sits 5px inside the right edge
-              const gx = (px + w - 5 - gw) + (off.x|0);
+              // Facing right: draw so the gun sits ~3px inside the right edge
+              const gx = (px + w - INSET - gw) + (off.x|0);
               ctx.drawImage(art.img, gx, gy, gw, gh);
             }
           }
@@ -280,7 +291,13 @@
         const g = guns[i];
         if (!g || typeof g.id !== 'number' || !g.sprite) continue;
         const img = new Image(); img.src = g.sprite;
-        this.images.guns[g.id] = { img, offset: (g.offset || {x:0,y:0}) };
+        this.images.guns[g.id] = {
+          img,
+          offset: (g.offset || {x:0,y:0}),
+          // Optional per-gun anchor in source pixels: distance from image top
+          // to the top of the pistol/weapon grip. Used to align to player mid-height.
+          anchorGripTop: (typeof g.anchorGripTop === 'number') ? g.anchorGripTop : undefined
+        };
       }
     } catch(e) {
       // Ignore asset errors in classroom setting
@@ -314,14 +331,16 @@
     const cP2 = '#99CCFF';
     const cUI = '#111';
 
-    // Round timer big at top center (prototype style)
+    // Round timer big at top center (prototype style) — hidden when game over shows its own timer
     ctx.save();
     ctx.font = '80px Segoe UI, Arial, sans-serif, monospace';
     ctx.fillStyle = cUI;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     const t = Math.max(0, Math.ceil(snap.timeLeft||0)) + '';
-    ctx.fillText(t, Math.floor(cw/2), 16);
+    if (!this.gameOver){
+      ctx.fillText(t, Math.floor(cw/2), 16);
+    }
     ctx.restore();
 
     const pad = 16; const panelW = 240; const panelH = 65;
@@ -385,8 +404,38 @@
       const rankText = (winner === -1) ? (r===0?'T-1':'T-1') : (r===0?'1st':'2nd');
       ctx.save(); ctx.font='24px Segoe UI, Arial, sans-serif'; ctx.fillStyle='#555'; ctx.fillText(rankText, px+panelW-80, rowY); ctx.restore();
     }
-    // Instruction
-    ctx.save(); ctx.font='24px Segoe UI, Arial, sans-serif'; ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.fillText('Returning to room…', cw/2, py+panelH+50); ctx.restore();
+    // Rematch boxes and countdown at top-middle
+    const rem = model && model.rematch;
+    const remainingMs = rem && typeof rem.remainingMs === 'number' ? rem.remainingMs : null;
+    if (remainingMs !== null){
+      const sec = Math.max(0, Math.ceil(remainingMs/1000));
+      ctx.save(); ctx.font='64px Segoe UI, Arial, sans-serif, monospace'; ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.textBaseline='top';
+      ctx.fillText(String(sec), cw/2, 16);
+      ctx.restore();
+    }
+    // Two decision boxes under the stats panel
+    const boxW = 300, boxH = 80; const gap = 40;
+    const bx1 = Math.floor(cw/2 - gap/2 - boxW);
+    const bx2 = Math.floor(cw/2 + gap/2);
+    const by = py + panelH + 40;
+    const drawChoiceBox = (x, y, label, state, color)=>{
+      ctx.save();
+      ctx.globalAlpha = 0.9; ctx.fillStyle='#fff'; ctx.fillRect(x,y,boxW,boxH); ctx.globalAlpha=1; ctx.strokeStyle=color; ctx.lineWidth=3; ctx.strokeRect(x+0.5,y+0.5,boxW-1,boxH-1);
+      ctx.font='22px Segoe UI, Arial, sans-serif'; ctx.fillStyle='#111'; ctx.textAlign='left'; ctx.textBaseline='top';
+      ctx.fillText(label, x+14, y+10);
+      let msg = 'Waiting…';
+      if (state === 'ready') msg = 'Ready!'; else if (state === 'left') msg = 'Left';
+      ctx.font='28px Segoe UI, Arial, sans-serif'; ctx.textAlign='right'; ctx.textBaseline='bottom'; ctx.fillText(msg, x+boxW-14, y+boxH-12);
+      ctx.restore();
+    };
+    const sP1 = rem && rem.p1 || 'waiting';
+    const sP2 = rem && rem.p2 || 'waiting';
+    drawChoiceBox(bx1, by, 'Player 1', sP1, '#FF4040');
+    drawChoiceBox(bx2, by, 'Player 2', sP2, '#99CCFF');
+    // Small legend at bottom
+    ctx.save(); ctx.font='20px Segoe UI, Arial, sans-serif'; ctx.fillStyle='#fff'; ctx.textAlign='center';
+    ctx.fillText('Press Z to rematch or X to return to room', cw/2, by + boxH + 36);
+    ctx.restore();
   };
 
   window.GameRenderer = GameRenderer;

@@ -11,6 +11,7 @@
     this.container = container || null;
     this.overlay = null;
     this.timerId = null;
+    this.textEl = null;
   }
 
   NetCountdownState.prototype._ensureOverlay = function(){
@@ -41,6 +42,19 @@
     if (!this._ensureOverlay()) return;
     this.textEl.textContent = text || '';
     this.overlay.style.opacity = text ? '1' : '0';
+  };
+
+  // Server-driven sync: directly show current seconds or GO!
+  NetCountdownState.prototype.sync = function(seconds){
+    if (seconds > 0){
+      this._setText(String(seconds|0));
+    } else {
+      this._setText('GO!');
+      // auto hide shortly after
+      const self = this;
+      if (this.timerId) { clearTimeout(this.timerId); this.timerId = null; }
+      this.timerId = setTimeout(function(){ self.stop(); }, 500);
+    }
   };
 
   NetCountdownState.prototype.start = function(seconds){

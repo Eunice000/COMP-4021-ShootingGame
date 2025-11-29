@@ -50,7 +50,12 @@ class GameEngine {
     this.tickRate = 60;
     this.dt = 1 / this.tickRate;
     this.timeLeft = 0;
+    // Pre-start countdown state (server-authoritative)
+    this.preStartMs = 3000;
+    this._preRemainMs = 0;
+    this._lastCountdownSec = null;
     this._callbacks = { onSnapshot: null, onGameOver: null };
+    this._onRoundCountdown = null;
     this._roleBySocket = new Map(); // socketId -> 'p1'|'p2'
     this._inputHold = { p1: 0, p2: 0 };
     this._serverInput = makeServerInput();
@@ -95,6 +100,7 @@ class GameEngine {
 
   setOnSnapshot(cb) { this._callbacks.onSnapshot = cb; }
   setOnGameOver(cb) { this._callbacks.onGameOver = cb; }
+  setOnRoundCountdown(cb) { this._onRoundCountdown = cb; }
 
   handleInputPacket(socketId, pkt) {
     // Only hold is necessary; edges are derived in PlayerController
@@ -110,6 +116,20 @@ class GameEngine {
     this.tickRate = (this.GameConfig && this.GameConfig.tickRate) || 60;
     this.dt = 1 / this.tickRate;
     this.timeLeft = (this.GameConfig && this.GameConfig.roundTimer) || 180;
+    // Initialize pre-start countdown
+    const cfgPre = (this.GameConfig && this.GameConfig.preRoundCountdownMs);
+    this.preStartMs = (typeof cfgPre === 'number' && cfgPre >= 0) ? cfgPre : 3000;
+    this._preRemainMs = this.preStartMs | 0;
+    this._lastCountdownSec = null;
+    // Emit initial countdown second if applicable
+    if (this._preRemainMs > 0) {
+      const sec = Math.ceil(this._preRemainMs / 1000);
+      this._lastCountdownSec = sec;
+      if (typeof this._onRoundCountdown === 'function') this._onRoundCountdown(sec);
+    } else {
+      // No countdown configured → immediately signal GO (0)
+      if (typeof this._onRoundCountdown === 'function') this._onRoundCountdown(0);
+    }
     const stepMs = Math.floor(1000 / this.tickRate);
     this.timer = setInterval(() => this._step(), stepMs);
   }
@@ -126,8 +146,33 @@ class GameEngine {
     applyBitmaskTo(this._serverInput._state.p1, this._inputHold.p1);
     applyBitmaskTo(this._serverInput._state.p2, this._inputHold.p2);
 
-    // Update stage
-    if (this.stage && this.stage.update) this.stage.update(this.dt);
+    // Handle pre-start countdown: freeze world and timer until GO
+    let inPreStart = this._preRemainMs > 0;
+    if (inPreStart) {
+      // Decrement prestart timer
+      this._preRemainMs -= (this.dt * 1000);
+      if (this._preRemainMs <= 0) {
+        this._preRemainMs = 0;
+        // Emit GO (0) once
+        if (typeof this._onRoundCountdown === 'function') this._onRoundCountdown(0);
+        this._lastCountdownSec = 0;
+        inPreStart = false;
+      } else {
+        const sec = Math.ceil(this._preRemainMs / 1000);
+        if (sec !== this._lastCountdownSec) {
+          this._lastCountdownSec = sec;
+          if (typeof this._onRoundCountdown === 'function') this._onRoundCountdown(sec);
+        }
+      }
+    }
+
+    // Only advance simulation after pre-start finishes
+    if (!inPreStart) {
+      if (this.stage && this.stage.update) this.stage.update(this.dt);
+      // Decrease timer and check win conditions after simulation update
+      this.timeLeft -= this.dt;
+      if (this.timeLeft < 0) this.timeLeft = 0;
+    }
 
     // Post-update: handle out-of-bounds (blast zone) and respawn like prototype GameplayState
     const cfg = this.GameConfig || {};
@@ -158,10 +203,6 @@ class GameEngine {
         }
       }
     }
-
-    // Decrease timer and check win conditions
-    this.timeLeft -= this.dt;
-    if (this.timeLeft < 0) this.timeLeft = 0;
 
     const players = this.stage.players || [];
     const p1 = players[0];
