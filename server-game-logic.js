@@ -81,7 +81,8 @@ class ServerGameState {
         hurtTimerMs: 0,
         airJumpsLeft: GAME_CONFIG.player.maxAirJumps,
         lastHitBy: null,
-        lastHitByTimer: 0
+        lastHitByTimer: 0,
+        dropThroughTimer: 0 // For dropping through platforms
       },
       {
         id: 'p2',
@@ -101,7 +102,8 @@ class ServerGameState {
         hurtTimerMs: 0,
         airJumpsLeft: GAME_CONFIG.player.maxAirJumps,
         lastHitBy: null,
-        lastHitByTimer: 0
+        lastHitByTimer: 0,
+        dropThroughTimer: 0 // For dropping through platforms
       }
     ];
     
@@ -146,21 +148,37 @@ class ServerGameState {
   }
   
   getDefaultMap() {
-    // Default map similar to prototype
+    // Default map with multiple platforms (similar to map1)
     return {
       width: 1920,
       height: 1080,
       platforms: [
-        { x: 192, y: 950, w: 1536, h: 8 }
+        // level 1 (Top)
+        { x: 100, y: 300, w: 700, h: 8 },
+        { x: 1120, y: 300, w: 700, h: 8 },
+        // Level 2
+        { x: 100, y: 450, w: 450, h: 8 },
+        { x: 800, y: 450, w: 320, h: 8 },
+        { x: 1370, y: 450, w: 450, h: 8 },
+        // Level 3
+        { x: 500, y: 600, w: 920, h: 8 },
+        // Level 4 (Bottom)
+        { x: 200, y: 750, w: 600, h: 8 },
+        { x: 1220, y: 750, w: 600, h: 8 }
       ],
       playerSpawns: [
-        { x: 344, y: 830 }, // Adjusted Y to be on platform
-        { x: 1496, y: 830 }
+        { x: 285, y: 270 }, // On top platform
+        { x: 1555, y: 270 }
       ],
       powerUpSpawns: [
-        { x: 536, y: 870 },
-        { x: 920, y: 870 },
-        { x: 1304, y: 870 }
+        { x: 410, y: 220 },
+        { x: 1430, y: 220 },
+        { x: 285, y: 370 },
+        { x: 920, y: 370 },
+        { x: 1555, y: 370 },
+        { x: 920, y: 520 },
+        { x: 460, y: 670 },
+        { x: 1480, y: 670 }
       ]
     };
   }
@@ -432,11 +450,22 @@ class ServerGameState {
     // Jump
     const jumpPressed = input.up && !prevInput.up;
     if (jumpPressed && this.canPlayerJump(pl)) {
+      const wasOnGround = pl.onGround;
       pl.vy = -GAME_CONFIG.player.jumpSpeed;
       pl.onGround = false;
-      if (!pl.onGround) {
+      
+      // If jumping from air, consume an air jump
+      if (!wasOnGround) {
         pl.airJumpsLeft = Math.max(0, pl.airJumpsLeft - 1);
       }
+    }
+    
+    // Drop through platforms (down key while on ground)
+    const downPressed = input.down && !prevInput.down;
+    if (downPressed && pl.onGround) {
+      pl.dropThroughTimer = 0.2; // 0.2 seconds to drop through
+      pl.onGround = false;
+      if (pl.vy < 60) pl.vy = 60; // Ensure downward motion
     }
     
     // Refresh air jumps when grounded
@@ -482,28 +511,52 @@ class ServerGameState {
   }
   
   /**
-   * Check platform collisions
+   * Check platform collisions (one-way platforms - can only land on top)
    */
   checkPlatformCollisions(pl, dt) {
     pl.onGround = false;
     
+    // If player has drop-through timer, skip platform checks
+    if (pl.dropThroughTimer && pl.dropThroughTimer > 0) {
+      pl.dropThroughTimer = Math.max(0, pl.dropThroughTimer - dt);
+      return;
+    }
+    
+    // Calculate previous position (before this frame's movement)
+    const prevY = pl.y - pl.vy * dt;
+    const prevBottom = prevY + pl.h;
+    
+    // Only check if moving downward (falling)
+    if (pl.vy <= 0) {
+      return;
+    }
+    
+    // Check all platforms
     for (let i = 0; i < this.platforms.length; i++) {
       const pf = this.platforms[i];
       
-      // AABB collision
+      // Broad phase: AABB overlap check
       if (pl.x < pf.x + pf.w && pl.x + pl.w > pf.x &&
           pl.y < pf.y + pf.h && pl.y + pl.h > pf.y) {
         
-        // Check if landing from above
-        const prevY = pl.y - pl.vy * dt;
-        const prevBottom = prevY + pl.h;
+        // Check horizontal overlap
+        const horizontallyOver = (pl.x + pl.w) > pf.x && pl.x < (pf.x + pf.w);
         
-        if (pl.vy > 0 && prevBottom <= pf.y + 0.5) {
-          // Land on platform
-          pl.y = pf.y - pl.h;
+        // Check if player was above the platform top in previous frame
+        // Use a small epsilon to prevent tunneling through thin platforms
+        const platformTop = pf.y;
+        const wasAbove = prevBottom <= platformTop + 2.0; // Increased epsilon for better detection
+        
+        if (wasAbove && horizontallyOver) {
+          // Land on platform - snap player to platform top
+          pl.y = platformTop - pl.h;
           pl.vy = 0;
           pl.onGround = true;
-          break;
+          
+          // Refresh air jumps when landing
+          pl.airJumpsLeft = GAME_CONFIG.player.maxAirJumps;
+          
+          break; // Only land on one platform at a time
         }
       }
     }
@@ -723,6 +776,7 @@ class ServerGameState {
     pl.lastHitBy = null;
     pl.lastHitByTimer = 0;
     pl.airJumpsLeft = GAME_CONFIG.player.maxAirJumps;
+    pl.dropThroughTimer = 0;
   }
   
   /**
@@ -791,6 +845,12 @@ class ServerGameState {
         h: pu.h,
         active: pu.active,
         _ttlSec: pu._ttlSec
+      })),
+      platforms: this.platforms.map(pf => ({
+        x: pf.x,
+        y: pf.y,
+        w: pf.w,
+        h: pf.h
       })),
       timeRemaining: this.timeRemaining,
       stats: this.stats,

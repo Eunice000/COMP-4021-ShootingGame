@@ -478,6 +478,18 @@
       });
     }
 
+    // Draw platforms (debug mode - optional)
+    if (window.DEBUG_PLATFORMS && serverGameState.platforms) {
+      ctx.save();
+      ctx.strokeStyle = '#00ff00';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      serverGameState.platforms.forEach(pf => {
+        ctx.strokeRect(pf.x, pf.y, pf.w, pf.h);
+      });
+      ctx.restore();
+    }
+
     // Draw UI
     renderUI(ctx);
   }
