@@ -206,7 +206,7 @@ io.on('connection', (socket) => {
               
               activeRooms.delete(oldRoomId);
               console.log('[server] Old room closed:', oldRoomId);
-            }, 100);
+            }, 1000); // Changed to 1 second to allow reconnection
           } else {
             // No remaining players, just close the room
             activeRooms.delete(oldRoomId);
@@ -243,11 +243,19 @@ io.on('connection', (socket) => {
           gameState: null, // Will be ServerGameState instance when game starts
           readyPlayers: new Set(),
           startRequests: new Set(), // Track players who pressed Start button
-          playerAssignments: new Map() // socketId -> 'p1' or 'p2'
+          playerAssignments: new Map(), // socketId -> 'p1' or 'p2'
+          gameStarted: false // Track if game has started (room should be closed to new players)
         });
       }
 
       const roomData = activeRooms.get(roomId);
+      
+      // If room has gameStarted flag, don't allow new players to join
+      if (roomData.gameStarted) {
+        socket.emit('error', { message: 'Game has already started. This room is closed to new players.' });
+        return;
+      }
+      
       roomData.players.add(socket.id);
       
       // Assign player number based on join order
@@ -353,7 +361,7 @@ io.on('connection', (socket) => {
           // Close the room - remove it completely (after notifications are sent)
           activeRooms.delete(roomId);
           console.log('[server] Room closed due to player leaving:', roomId, 'Remaining players notified');
-        }, 200); // Give time for notifications to be sent
+        }, 1000); // Changed to 1 second to allow reconnection
       } else {
         // No remaining players, just close the room
         activeRooms.delete(roomId);
@@ -373,10 +381,30 @@ io.on('connection', (socket) => {
       roomData.startRequests.add(socket.id);
       console.log('[server] startRequests size:', roomData.startRequests.size, 'players size:', roomData.players.size);
       
-      // If both players requested start, notify them to navigate
+      // If both players requested start, notify them to navigate and close the room
       if (roomData.startRequests.size === 2 && roomData.players.size === 2) {
         console.log('[server] Both players ready, sending both-players-ready to room', roomId);
+        
+        // Mark room as game started - this prevents new players from joining
+        roomData.gameStarted = true;
+        
+        // Send notification to players
         io.to(roomId).emit('both-players-ready', { roomId });
+        
+        // Close the room immediately after both players start the game
+        // This prevents new players from joining while the game is in progress
+        setTimeout(() => {
+          // Remove all players from the socket.io room (but keep them in roomData.players for game session)
+          roomData.players.forEach(playerSocketId => {
+            const playerSocket = io.sockets.sockets.get(playerSocketId);
+            if (playerSocket) {
+              playerSocket.leave(roomId);
+              // Keep socket.roomId - they need it to join game.html and send game data
+            }
+          });
+          
+          console.log('[server] Room closed after both players started game:', roomId, '- New players cannot join');
+        }, 100); // Small delay to ensure both-players-ready event is received
       }
     } else {
       console.warn('[server] Room not found:', roomId);
@@ -513,6 +541,9 @@ io.on('connection', (socket) => {
       const roomId = socket.roomId;
       const roomData = activeRooms.get(roomId);
       if (roomData) {
+        // Check if game has started (gameState exists and is running)
+        const gameStarted = roomData.gameState && roomData.gameState.running;
+        
         // Get remaining players BEFORE removing the disconnected player
         const remainingPlayers = Array.from(roomData.players).filter(id => id !== socket.id);
         
@@ -524,7 +555,10 @@ io.on('connection', (socket) => {
             message: 'The other player has left. Room is closing. You can create or join a new room.'
           });
           
-          // Small delay to ensure notification is received before closing
+          // If game has started, wait 3 seconds before closing room to allow reconnection
+          // Otherwise, use shorter delay (1 second)
+          const closeDelay = gameStarted ? 3000 : 1000;
+          
           setTimeout(() => {
             // Then send room-closed event
             io.to(roomId).emit('room-closed', {
@@ -540,7 +574,7 @@ io.on('connection', (socket) => {
                 playerSocket.roomId = null;
               }
             });
-          }, 100);
+          }, closeDelay);
         }
         
         // Now remove the disconnected player from room data
@@ -565,10 +599,12 @@ io.on('connection', (socket) => {
         }
 
         // Close the room - remove it completely (after notification)
+        // If game has started, wait 3 seconds; otherwise 1 second
+        
         setTimeout(() => {
           activeRooms.delete(roomId);
           console.log('[server] Room closed:', roomId, 'Remaining players notified');
-        }, 200); // Give time for notifications to be sent
+        });
       }
     }
   });
