@@ -82,6 +82,27 @@ async function writeRooms(rooms){
   }
 }
 
+// --- Room persistence maintenance ---
+async function deleteRoomFromPersistence(id){
+  try{
+    const rooms = await readRooms();
+    const next = rooms.filter(r => r.id !== id);
+    if (next.length !== rooms.length){
+      await writeRooms(next);
+    }
+  }catch(e){
+    console.error('deleteRoomFromPersistence error:', e);
+  }
+}
+
+async function clearAllRoomsPersistence(){
+  try{
+    await writeRooms([]);
+  }catch(e){
+    console.error('clearAllRoomsPersistence error:', e);
+  }
+}
+
 function generateRoomId(existing){
   // 6-digit room id, ensure uniqueness against existing array
   const set = new Set(existing.map(r => r.id));
@@ -234,6 +255,8 @@ function removeRoom(id){
   clearCountdown(room);
   clearRematch(room);
   roomsById.delete(id);
+  // remove from persistence (fire-and-forget)
+  deleteRoomFromPersistence(id);
 }
 
 function forceLeaveRoom(room){
@@ -430,6 +453,29 @@ io.on('connection', (socket)=>{
 
 httpServer.listen(PORT, ()=> console.log(`Server running on http://localhost:${PORT}`));
 httpServer.on('error', (err) => console.error('Server error:', err));
+
+// On server shutdown, wipe persisted rooms so stale rooms don't linger
+let shuttingDown = false;
+async function handleShutdown(signal){
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log('Shutting down signal:', signal);
+  try{
+    await clearAllRoomsPersistence();
+  }catch(e){
+    console.error('Error clearing rooms on shutdown', e);
+  } finally {
+    try { httpServer.close(()=>{}); } catch(e) {}
+    // Give a short grace period then exit
+    setTimeout(()=> process.exit(0), 200);
+  }
+}
+process.on('SIGINT', ()=> handleShutdown('SIGINT'));
+process.on('SIGTERM', ()=> handleShutdown('SIGTERM'));
+process.on('beforeExit', async ()=>{
+  // Attempt to clear rooms if process is about to exit for any reason
+  try{ await clearAllRoomsPersistence(); }catch(e){ /* ignore */ }
+});
 
 // ---- Game lifecycle helpers ----
 function startRoomGame(room){
