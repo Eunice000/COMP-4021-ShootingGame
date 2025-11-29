@@ -21,12 +21,12 @@
       "passwordHash": "$2b$10$aZm7r6SfjLoeh39Xlwcpue6zaECKwd6tBDOKWW5SELrjDJRtCvMX2"
     },
     {
-      "name": "user1",
-      "passwordHash": "$2b$10$FxTq61rzWRIPucpn0rIkg.8KQwF/8EOu.Pbw7JY7Q0r0At95e178O"
+      "name": "Samuel",
+      "passwordHash": "$2b$10$jNAKoCqXI9FvOAjKUAgfGeDIGpMPeM9gJ8nKUt3KVeQxOzD1QQA4C"
     },
     {
-      "name": "user2",
-      "passwordHash": "$2b$10$8upNPC115aBQLjFFh3wTxeW1NaYYiujuBC4Em/KU5cjzPb05GZ2wW"
+      "name": "Sam",
+      "passwordHash": "$2b$10$sm5fYqg7ke3Pspz7UfoWCO3nhh8Q6Dt4gn468xGZwG9hdUSa5KFPu"
     }
   ]
 }

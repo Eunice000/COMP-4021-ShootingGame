@@ -20,7 +20,22 @@
   const createRoomBtn = document.getElementById('createRoomBtn');
   const findRoomBtn = document.getElementById('findRoomBtn');
 
-  const API_BASE = window.location.origin;
+  // Detect if accessing from wrong port or file:// protocol and suggest correct one
+  const currentPort = window.location.port;
+  const isFileProtocol = window.location.protocol === 'file:';
+  
+  // If using file:// protocol or wrong port, default to localhost:3000
+  let API_BASE;
+  if (isFileProtocol) {
+    API_BASE = 'http://localhost:3000';
+    console.warn('You are opening the file directly. Please access via http://localhost:3000 after starting the server.');
+  } else if (currentPort && currentPort !== '3000' && currentPort !== '') {
+    API_BASE = window.location.protocol + '//' + window.location.hostname + ':3000';
+    console.warn('You are accessing the page from port ' + currentPort + '. For best results, access via http://localhost:3000');
+  } else {
+    API_BASE = window.location.origin;
+  }
+  
   let mode = 'login'; // or 'register'
   let currentUser = null;
 
@@ -47,7 +62,23 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, password })
       });
-      const data = await res.json();
+      
+      // Check if response has content
+      const text = await res.text();
+      if (!text) {
+        showMessage('Server returned empty response. Is the server running on ' + API_BASE + '?');
+        return;
+      }
+      
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        showMessage('Server returned invalid response. Make sure the server is running on port 3000.');
+        console.error('Response was:', text);
+        return;
+      }
+      
       if (res.ok) {
         showMessage('Registered successfully. You can now sign in.');
         setMode('login');
@@ -55,7 +86,11 @@
         showMessage(data.error || 'Registration failed');
       }
     } catch(err){
-      showMessage('Unable to register: ' + err.message);
+      if (err.message.includes('fetch')) {
+        showMessage('Unable to connect to server. Make sure the server is running on ' + API_BASE);
+      } else {
+        showMessage('Unable to register: ' + err.message);
+      }
     }
   }
 
@@ -69,7 +104,23 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, password })
       });
-      const data = await res.json();
+      
+      // Check if response has content
+      const text = await res.text();
+      if (!text) {
+        showMessage('Server returned empty response. Is the server running on ' + API_BASE + '?');
+        return;
+      }
+      
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        showMessage('Server returned invalid response. Make sure the server is running on port 3000.');
+        console.error('Response was:', text);
+        return;
+      }
+      
       if (res.ok && data.ok) {
         showMessage('Welcome, ' + data.name + '!');
         currentUser = data.name;
@@ -95,7 +146,11 @@
         showMessage(data.error || 'Login failed');
       }
     } catch(err){
-      showMessage('Unable to login: ' + err.message);
+      if (err.message.includes('fetch')) {
+        showMessage('Unable to connect to server. Make sure the server is running on ' + API_BASE);
+      } else {
+        showMessage('Unable to login: ' + err.message);
+      }
     }
   }
 
@@ -121,6 +176,9 @@
 
   if (createRoomBtn) {
     createRoomBtn.addEventListener('click', async function(){
+      // Leave current room if in one
+      leaveCurrentRoom();
+      
       const hostName = currentUser || (nameInput && nameInput.value.trim()) || 'anonymous';
       try{
         const res = await fetch(API_BASE + '/api/rooms', {

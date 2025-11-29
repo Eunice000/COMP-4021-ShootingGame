@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Game - Shooting Game</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>">
+    <link rel="stylesheet" href="prototype/css/styles.css">
+    <script>
+        // 過濾瀏覽器擴展相關的錯誤訊息
+        (function() {
+            const originalError = console.error;
+            const originalWarn = console.warn;
+            const originalLog = console.log;
+            
+            // 檢查是否為擴展相關錯誤
+            const isExtensionError = (message) => {
+                if (!message) return false;
+                const msg = String(message).toLowerCase();
+                // 檢查所有可能的擴展錯誤模式
+                return msg.includes('message port closed') ||
+                       msg.includes('message port') ||
+                       msg.includes('port closed') ||
+                       msg.includes('the message port') ||
+                       msg.includes('port closed before') ||
+                       msg.includes('immersive translate') ||
+                       msg.includes('immersivetranslate') ||
+                       msg.includes('immersive') ||
+                       msg.includes('translate error') ||
+                       msg.includes('translate error:') ||
+                       msg.includes('model not available') ||
+                       msg.includes('unknownerror') ||
+                       msg.includes('unknown error') ||
+                       msg.includes('sync rules error') ||
+                       msg.includes('request timeout') ||
+                       msg.includes('failed to fetch') ||
+                       msg.includes('failed to load resource') ||
+                       msg.includes('err_network_changed') ||
+                       msg.includes('run cron task failed') ||
+                       msg.includes('content_script.js') ||
+                       msg.includes('content-script.js') ||
+                       msg.includes('content.js') ||
+                       msg.includes('content_script') ||
+                       msg.includes('content:') ||
+                       msg.includes('assets.immersivetranslate.cn') ||
+                       msg.includes('analytics: sent') ||
+                       msg.includes('analytics event') ||
+                       msg.includes('analytics') ||
+                       msg.includes('sent 1') ||
+                       msg.includes('sent ') ||
+                       (msg.includes('404') && msg.includes('immersivetranslate')) ||
+                       msg.includes('chrome-extension://') ||
+                       msg.includes('moz-extension://') ||
+                       msg.includes('safari-extension://') ||
+                       // 檢查文件名模式 - 如果包含 content 和錯誤相關詞
+                       (msg.includes('content') && (msg.includes('error') || msg.includes('uncaught') || msg.includes('promise'))) ||
+                       // 檢查文件名模式
+                       (msg.includes('error') && (msg.includes('content_script') || msg.includes('content') || msg.includes('immersive'))) ||
+                       // 檢查是否包含 "translate" 和 "error"
+                       (msg.includes('translate') && msg.includes('error')) ||
+                       // 檢查是否包含 "model not available"
+                       (msg.includes('model') && msg.includes('not') && msg.includes('available'));
+            };
+            
+            // 過濾 Immersive Translate 和 message port 相關錯誤
+            const filterErrors = (args) => {
+                if (!args || args.length === 0) return false;
+                
+                // 將所有參數合併成一個字符串進行檢查（包括堆疊追蹤）
+                let combinedText = '';
+                for (let i = 0; i < args.length; i++) {
+                    const arg = args[i];
+                    if (arg !== null && arg !== undefined) {
+                        if (typeof arg === 'string') {
+                            combinedText += arg + ' ';
+                        } else if (typeof arg === 'object') {
+                            // 檢查對象的所有字符串屬性
+                            if (arg.message) combinedText += String(arg.message) + ' ';
+                            if (arg.toString) combinedText += String(arg.toString()) + ' ';
+                            if (arg.stack) combinedText += String(arg.stack) + ' ';
+                            if (arg.name) combinedText += String(arg.name) + ' ';
+                            // 檢查對象的所有屬性
+                            for (const key in arg) {
+                                if (typeof arg[key] === 'string') {
+                                    combinedText += arg[key] + ' ';
+                                }
+                            }
+                        } else {
+                            combinedText += String(arg) + ' ';
+                        }
+                    }
+                }
+                
+                // 檢查合併後的文本
+                if (isExtensionError(combinedText)) {
+                    return true;
+                }
+                
+                // 也檢查每個參數單獨
+                for (let i = 0; i < args.length; i++) {
+                    const arg = args[i];
+                    // 直接檢查參數
+                    if (isExtensionError(arg)) {
+                        return true;
+                    }
+                    // 檢查對象屬性
+                    if (arg && typeof arg === 'object') {
+                        if (arg.message && isExtensionError(arg.message)) {
+                            return true;
+                        }
+                        if (arg.toString && isExtensionError(arg.toString())) {
+                            return true;
+                        }
+                        if (arg.stack && isExtensionError(arg.stack)) {
+                            return true;
+                        }
+                        if (arg.name && isExtensionError(arg.name)) {
+                            return true;
+                        }
+                        // 檢查對象的所有字符串屬性
+                        for (const key in arg) {
+                            if (typeof arg[key] === 'string' && isExtensionError(arg[key])) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                return false;
+            };
+            
+            console.error = function(...args) {
+                if (!filterErrors(args)) {
+                    originalError.apply(console, args);
+                } else {
+                    // 靜默過濾，不輸出任何內容
+                }
+            };
+            
+            console.warn = function(...args) {
+                if (!filterErrors(args)) {
+                    originalWarn.apply(console, args);
+                } else {
+                    // 靜默過濾，不輸出任何內容
+                }
+            };
+            
+            // 過濾擴展相關的日誌
+            console.log = function(...args) {
+                // 不要過濾包含 [game.html] 的日誌，這些是調試信息
+                let shouldFilter = false;
+                if (args && args.length > 0) {
+                    const firstArg = String(args[0] || '');
+                    if (firstArg.includes('[game.html]') || firstArg.includes('[client-game-renderer]')) {
+                        shouldFilter = false; // 不要過濾調試日誌
+                    } else {
+                        shouldFilter = filterErrors(args);
+                    }
+                }
+                
+                if (!shouldFilter) {
+                    originalLog.apply(console, args);
+                } else {
+                    // 靜默過濾，不輸出任何內容
+                }
+            };
+            
+            // 捕獲未處理的 Promise 拒絕
+            window.addEventListener('unhandledrejection', function(event) {
+                const reason = event.reason;
+                let reasonStr = '';
+                let shouldSuppress = false;
+                
+                // 構建完整的錯誤文本（包括所有可能的屬性）
+                let fullErrorText = '';
+                
+                // 檢查多種形式的錯誤訊息
+                if (typeof reason === 'string') {
+                    reasonStr = reason;
+                    fullErrorText = reasonStr;
+                    shouldSuppress = isExtensionError(reasonStr);
+                } else if (reason) {
+                    // 檢查 Error 對象
+                    if (reason.message) {
+                        reasonStr = reason.message;
+                        fullErrorText += reasonStr + ' ';
+                        shouldSuppress = isExtensionError(reasonStr);
+                    }
+                    if (!shouldSuppress && reason.toString) {
+                        const toStringResult = reason.toString();
+                        fullErrorText += toStringResult + ' ';
+                        shouldSuppress = isExtensionError(toStringResult);
+                    }
+                    if (!shouldSuppress && reason.stack) {
+                        fullErrorText += reason.stack + ' ';
+                        shouldSuppress = isExtensionError(reason.stack);
+                    }
+                    // 檢查錯誤名稱
+                    if (!shouldSuppress && reason.name) {
+                        fullErrorText += reason.name + ' ';
+                        shouldSuppress = isExtensionError(reason.name);
+                    }
+                    // 檢查文件名（如果錯誤對象有 source 或 filename 屬性）
+                    if (!shouldSuppress && reason.source) {
+                        fullErrorText += String(reason.source) + ' ';
+                        shouldSuppress = isExtensionError(String(reason.source));
+                    }
+                    if (!shouldSuppress && reason.filename) {
+                        fullErrorText += String(reason.filename) + ' ';
+                        shouldSuppress = isExtensionError(String(reason.filename));
+                    }
+                    // 檢查所有屬性
+                    if (!shouldSuppress) {
+                        for (const key in reason) {
+                            if (typeof reason[key] === 'string') {
+                                fullErrorText += reason[key] + ' ';
+                            }
+                        }
+                    }
+                }
+                
+                // 檢查合併後的完整文本
+                if (!shouldSuppress && fullErrorText) {
+                    shouldSuppress = isExtensionError(fullErrorText);
+                }
+                
+                // 額外檢查：如果錯誤消息包含 "message port" 和 "content" 或 "uncaught"，也應該過濾
+                if (!shouldSuppress && reasonStr) {
+                    const lowerReason = reasonStr.toLowerCase();
+                    if ((lowerReason.includes('message port') || lowerReason.includes('port closed')) &&
+                        (lowerReason.includes('content') || lowerReason.includes('uncaught') || lowerReason.includes('promise'))) {
+                        shouldSuppress = true;
+                    }
+                }
+                
+                // 檢查堆疊追蹤中是否包含 content.js
+                if (!shouldSuppress && reason && reason.stack) {
+                    const stack = String(reason.stack).toLowerCase();
+                    if (stack.includes('content.js') || stack.includes('content_script.js') || stack.includes('content:1')) {
+                        shouldSuppress = true;
+                    }
+                }
+                
+                // 最後檢查：如果包含 "content.js:1" 或 "content:1"，直接過濾
+                if (!shouldSuppress && fullErrorText) {
+                    const lowerText = fullErrorText.toLowerCase();
+                    if (lowerText.includes('content.js:1') || lowerText.includes('content:1')) {
+                        shouldSuppress = true;
+                    }
+                }
+                
+                if (shouldSuppress) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation();
+                    return false;
+                }
+            }, true);
+            
+            // 捕獲全局錯誤
+            window.addEventListener('error', function(event) {
+                let shouldSuppress = false;
+                
+                if (event.message && isExtensionError(event.message)) {
+                    shouldSuppress = true;
+                }
+                if (!shouldSuppress && event.filename && isExtensionError(event.filename)) {
+                    shouldSuppress = true;
+                }
+                if (!shouldSuppress && event.error) {
+                    const error = event.error;
+                    if (error.message && isExtensionError(error.message)) {
+                        shouldSuppress = true;
+                    }
+                    if (!shouldSuppress && error.stack && isExtensionError(error.stack)) {
+                        shouldSuppress = true;
+                    }
+                    if (!shouldSuppress && error.name && isExtensionError(error.name)) {
+                        shouldSuppress = true;
+                    }
+                }
+                
+                if (shouldSuppress) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation();
+                    return false;
+                }
+            }, true);
+        })();
+    </script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+        }
+        
+        #game {
+            display: block;
+            margin: 0 auto;
+        }
+        
+        #countdown-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        
+        #countdown-text {
+            font-size: 200px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.8);
+            font-family: 'Segoe UI', Arial, sans-serif;
+        }
+        
+        #countdown-overlay.hidden {
+            display: none;
+        }
+        
+        #back-to-room-btn {
+            position: fixed;
+            bottom: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 15px 40px;
+            font-size: 24px;
+            font-weight: bold;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            z-index: 2000;
+            display: none;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            transition: background-color 0.3s;
+        }
+        
+        #back-to-room-btn:hover {
+            background-color: #45a049;
+        }
+        
+        #back-to-room-btn:active {
+            background-color: #3d8b40;
+        }
+        
+        #back-to-room-btn.visible {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="game"></canvas>
+    <div id="countdown-overlay">
+        <div id="countdown-text">3</div>
+    </div>
+    <button id="back-to-room-btn">Back to Room</button>
+
+    <!-- Prototype game scripts -->
+    <!-- Configs -->
+    <script src="prototype/js/config/gameConfig.js"></script>
+    <script src="prototype/js/config/controlsConfig.js"></script>
+    <script src="prototype/js/config/contentConfig.js"></script>
+
+    <!-- Embedded content data -->
+    <script src="prototype/js/assets/GunsData.js"></script>
+    <script src="prototype/js/assets/PlayersData.js"></script>
+    <script src="prototype/js/assets/MapsData.js"></script>
+    <script src="prototype/js/assets/PowerUpsData.js"></script>
+
+    <!-- Content Loaders -->
+    <script src="prototype/js/guns/GunLoader.js"></script>
+    <script src="prototype/js/utils/RegistryLoader.js"></script>
+    <script src="prototype/js/players/PlayerLoader.js"></script>
+    <script src="prototype/js/powerups/PowerUpLoader.js"></script>
+
+    <!-- Core -->
+    <script src="prototype/js/core/Timer.js"></script>
+    <script src="prototype/js/core/StateMachine.js"></script>
+    <script src="prototype/js/core/Renderer.js"></script>
+    <script src="prototype/js/core/Physics.js"></script>
+    <script src="prototype/js/core/Collision.js"></script>
+    <script src="prototype/js/core/Input.js"></script>
+    <script src="prototype/js/core/Game.js"></script>
+
+    <!-- Entities -->
+    <script src="prototype/js/entities/Entity.js"></script>
+    <script src="prototype/js/entities/Platform.js"></script>
+    <script src="prototype/js/powerups/PowerUp.js"></script>
+    <script src="prototype/js/guns/Gun.js"></script>
+    <script src="prototype/js/players/Player.js"></script>
+    <script src="prototype/js/players/PlayerController.js"></script>
+    <script src="prototype/js/entities/Bullet.js"></script>
+
+    <!-- World -->
+    <script src="prototype/js/world/StageLoader.js"></script>
+    <script src="prototype/js/world/Stage.js"></script>
+
+    <!-- UI -->
+    <script src="prototype/js/ui/GameplayUI.js"></script>
+    <script src="prototype/js/ui/GameOverUi.js"></script>
+
+    <!-- States -->
+    <script src="prototype/js/states/CountdownState.js"></script>
+    <script src="prototype/js/states/GameplayState.js"></script>
+    <script src="prototype/js/states/GameOverState.js"></script>
+    <script src="prototype/js/states/BootState.js"></script>
+
+    <!-- Client game renderer (server-authoritative mode) -->
+    <script src="js/client-game-renderer.js"></script>
+    
+    <script src="/socket.io/socket.io.js"></script>
+    
+    <script>
+    (function() {
+        // Get roomId from URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomId = urlParams.get('roomId');
+        
+        if (!roomId) {
+            alert('No room ID provided. Redirecting to home page.');
+            window.location.href = '/';
+            return;
+        }
+        
+        // Store roomId globally for client-game-renderer
+        window._roomIdFromUrl = roomId;
+        
+        // Override currentRoomId function to return URL parameter
+        const originalCurrentRoomId = window.currentRoomId;
+        window.currentRoomId = function() {
+            return window._roomIdFromUrl || (originalCurrentRoomId ? originalCurrentRoomId() : null);
+        };
+        
+        // Initialize socket connection
+        const socket = io();
+        window._gameSocket = socket;
+        
+        // Override gameSocket function
+        const originalGameSocket = window.gameSocket;
+        window.gameSocket = function() {
+            return window._gameSocket || (originalGameSocket ? originalGameSocket() : null);
+        };
+        
+        // Join room
+        socket.on('connect', () => {
+            console.log('[game.html] Connected to server');
+            const playerName = sessionStorage.getItem('playerName') || 'Player';
+            socket.emit('join-room', { roomId: roomId, playerName: playerName });
+            
+            // Request player assignment
+            socket.emit('request-player-assignment', { roomId: roomId });
+        });
+        
+        // Countdown functionality
+        const countdownOverlay = document.getElementById('countdown-overlay');
+        const countdownText = document.getElementById('countdown-text');
+        let countdownValue = 3;
+        let countdownInterval = null;
+        
+        function startCountdown() {
+            console.log('[game.html] Starting countdown');
+            
+            // Ensure elements exist
+            if (!countdownOverlay || !countdownText) {
+                console.error('[game.html] Countdown elements not found!', { overlay: !!countdownOverlay, text: !!countdownText });
+                return;
+            }
+            
+            // Clear any existing interval first
+            if (countdownInterval) {
+                console.log('[game.html] Clearing existing countdown interval');
+                clearInterval(countdownInterval);
+                countdownInterval = null;
+            }
+            
+            countdownOverlay.classList.remove('hidden');
+            countdownValue = 3;
+            countdownText.textContent = countdownValue;
+            console.log('[game.html] Countdown initialized, showing:', countdownValue);
+            
+            // Start countdown interval with error handling
+            try {
+                // Start the interval to count down - it will fire after 1 second
+                countdownInterval = setInterval(() => {
+                    try {
+                        console.log('[game.html] Countdown interval fired, current value:', countdownValue);
+                        countdownValue--;
+                        console.log('[game.html] Countdown value after decrement:', countdownValue);
+                        
+                        if (countdownValue > 0) {
+                            countdownText.textContent = countdownValue;
+                            console.log('[game.html] Updated countdown text to:', countdownValue);
+                        } else if (countdownValue === 0) {
+                            countdownText.textContent = 'GO!';
+                            console.log('[game.html] Countdown reached GO!');
+                            // Clear interval immediately to prevent further iterations
+                            if (countdownInterval) {
+                                clearInterval(countdownInterval);
+                                countdownInterval = null;
+                                console.log('[game.html] Countdown interval cleared');
+                            }
+                            // Wait one more second before hiding and starting game
+                            setTimeout(() => {
+                                try {
+                                    countdownOverlay.classList.add('hidden');
+                                    console.log('[game.html] Countdown finished, starting game');
+                                    // Ensure game renderer is initialized
+                                    if (window.startGame) {
+                                        console.log('[game.html] Initializing game renderer...');
+                                        window.startGame();
+                                    }
+                                    // Start the game loop after a short delay to ensure renderer is ready
+                                    setTimeout(() => {
+                                        if (window.startGameLoop) {
+                                            console.log('[game.html] Starting game loop...');
+                                            window.startGameLoop();
+                                        } else {
+                                            console.error('[game.html] window.startGameLoop not available!');
+                                        }
+                                    }, 100);
+                                } catch (err) {
+                                    console.error('[game.html] Error in countdown finish handler:', err);
+                                }
+                            }, 1000);
+                        } else {
+                            // countdownValue < 0, should not happen, but clear interval just in case
+                            console.warn('[game.html] Countdown value went negative:', countdownValue);
+                            if (countdownInterval) {
+                                clearInterval(countdownInterval);
+                                countdownInterval = null;
+                            }
+                        }
+                    } catch (err) {
+                        console.error('[game.html] Error in countdown interval:', err, err.stack);
+                        if (countdownInterval) {
+                            clearInterval(countdownInterval);
+                            countdownInterval = null;
+                        }
+                    }
+                }, 1000);
+                console.log('[game.html] Countdown interval created successfully, ID:', countdownInterval);
+            } catch (err) {
+                console.error('[game.html] Error creating countdown interval:', err, err.stack);
+            }
+        }
+        
+        function stopCountdown() {
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+                countdownInterval = null;
+            }
+        }
+        
+        let playerAssigned = false;
+        let gameStartReceived = false;
+        let countdownStarted = false;
+        let gameInitialized = false;
+        
+        // Send ready signal when player assignment is received
+        socket.on('player-assignment', (data) => {
+            console.log('[game.html] Player assignment received:', data.playerId);
+            playerAssigned = true;
+            
+            // Initialize game renderer early (before countdown)
+            if (window.startGame && !gameInitialized) {
+                console.log('[game.html] Initializing game renderer on player assignment...');
+                window.startGame();
+                gameInitialized = true;
+            }
+            
+            // Send ready signal to indicate we're on the game page
+            socket.emit('player-ready', { roomId: roomId });
+            
+            // If game-start was already received, start countdown now
+            if (gameStartReceived && !countdownStarted) {
+                console.log('[game.html] Both events received, starting countdown...');
+                countdownStarted = true;
+                startCountdown();
+            }
+        });
+        
+        // Listen for game-start event
+        socket.on('game-start', (data) => {
+            console.log('[game.html] Game start event received');
+            gameStartReceived = true;
+            
+            // Ensure game renderer is initialized
+            if (window.startGame && !gameInitialized) {
+                console.log('[game.html] Initializing game renderer on game-start...');
+                window.startGame();
+                gameInitialized = true;
+            }
+            
+            // Start countdown if player is already assigned and countdown hasn't started
+            if (playerAssigned && !countdownStarted) {
+                console.log('[game.html] Both events received, starting countdown...');
+                countdownStarted = true;
+                startCountdown();
+            } else if (!playerAssigned) {
+                console.log('[game.html] Waiting for player assignment before starting countdown...');
+            } else if (countdownStarted) {
+                console.log('[game.html] Countdown already started');
+            }
+        });
+        
+        // Listen for player leaving room
+        socket.on('player-left-room', (data) => {
+            console.log('[game.html] Player left room:', data);
+            stopCountdown();
+            // Show notification
+            alert(data.message || 'The other player has left. Returning to room selection...');
+            // Redirect back to main page
+            window.location.href = '/';
+        });
+        
+        // Also listen for disconnect
+        socket.on('disconnect', () => {
+            console.log('[game.html] Socket disconnected');
+            stopCountdown();
+            alert('Connection lost. Returning to room selection...');
+            window.location.href = '/';
+        });
+        
+        // If already connected, join room immediately
+        if (socket.connected) {
+            const playerName = sessionStorage.getItem('playerName') || 'Player';
+            socket.emit('join-room', { roomId: roomId, playerName: playerName });
+            socket.emit('request-player-assignment', { roomId: roomId });
+        }
+        
+        // Listen for game over event to show back button
+        socket.on('game-over', (data) => {
+            console.log('[game.html] Game over event received:', data);
+            // Show back to room button after a short delay
+            setTimeout(() => {
+                const backBtn = document.getElementById('back-to-room-btn');
+                if (backBtn) {
+                    backBtn.classList.add('visible');
+                }
+            }, 2000); // Show button 2 seconds after game over
+        });
+        
+        // Back to room button handler
+        const backBtn = document.getElementById('back-to-room-btn');
+        if (backBtn) {
+            backBtn.addEventListener('click', function() {
+                stopCountdown();
+                // Leave room before going back
+                if (socket && roomId && socket.connected) {
+                    socket.emit('leave-room', { roomId: roomId });
+                }
+                // Redirect to main page
+                window.location.href = '/';
+            });
+        }
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {
+            stopCountdown();
+        });
+    })();
+    </script>
+</body>
+
+</html>
