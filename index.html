@@ -298,34 +298,63 @@
 </head>
 
 <body>
-    <audio id="BackgroundMusic" src="/music/start_game_bgm.mp3"></audio>
-    <!-- Game canvas (hidden initially) -->
-    <canvas id="game" style="display: none;"></canvas>
+    <audio id="BackgroundMusic" src="music/start_game_bgm.mp3"></audio>
     <!-- start game  -->
-    <p style="background-image: url('/image/start_background.gif');"></p>
+    <p style="background-image: url('image/start_background.gif');"></p>
     <div class="start-game" id="start-game" tabindex="0" role="button" aria-label="Start game">
         <img id="startBtn" src="image/start_button.png" alt="start" height="200">
         <p class="start-caption">Click to Start</p>
     </div>
     <!-- player pair-up panel (hidden until login) -->
     <div class="pairup-container login-hidden" id="pairupContainer">
-        <h1>Player Pair Up</h1>
-        <div class="pairup-actions">
-            <div>
-                <button id="createRoomBtn" class="small-btn">Create Room</button>
-                <div id="createdRoom" class="created-room" aria-live="polite"></div>
+        <!-- Lobby view (post-login before joining/creating a room) -->
+        <div id="lobbyView" class="lobby-view">
+            <h1>Player Pair Up</h1>
+            <div id="currentUsername" class="current-user" aria-live="polite"></div>
+            <div class="button-column">
+                <button id="createRoomBtn" class="primary-btn">Create Room</button>
+                <button id="findRoomBtn" class="primary-btn">Find Room</button>
+                <button id="logoutBtn" class="primary-btn">Logout</button>
+            </div>
+        </div>
+
+        <!-- Find Rooms view (search + list) -->
+        <div id="findRoomsView" class="login-hidden find-rooms" aria-live="polite">
+            <h1>Room</h1>
+            <div class="rooms-toolbar">
+                <input id="findRoomSearch" class="rooms-search" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Search room number" aria-label="Search room number">
+                <button id="refreshRoomsBtn" class="primary-btn rooms-refresh" aria-label="Refresh rooms">Refresh</button>
+            </div>
+            <div id="roomsList" class="rooms-list" role="list">
+                <!-- Room rows rendered by findRooms.js -->
+            </div>
+            <div id="roomsEmpty" class="rooms-empty" style="display:none;">No rooms found.</div>
+            <button id="returnToLobbyBtn" class="primary-btn rooms-return">Return</button>
+        </div>
+
+        <!-- Room view (shown after create/join) -->
+        <div id="roomView" class="room-view login-hidden" aria-live="polite">
+            <h1 id="roomTitle">Room</h1>
+            <div id="roomCountdown" class="room-countdown" aria-live="polite"></div>
+            <button id="copyRoomIdBtn" class="primary-btn" style="margin-bottom:12px;">Copy Room ID</button>
+
+            <div id="playerBox" class="player-box" role="list">
+                <!-- rows are rendered by lobby.js: P1/P2 | username | ready badge -->
             </div>
 
-            <div>
-                <input type="text" id="findRoomInput" placeholder="Enter room number">
-                <button id="findRoomBtn" class="small-btn">Find Room</button>
-                <div id="foundRoom" class="found-room" aria-live="polite"></div>
+            <div class="room-action-row">
+                <button id="readyBtn" class="primary-btn" disabled>Ready</button>
+                <button id="leaveRoomBtn" class="primary-btn" disabled>Leave</button>
             </div>
         </div>
-        <div style="margin-top:12px; display:flex; gap:8px; flex-direction: column; align-items: center;">
-            <button id="startGameBtn" class="small-btn" style="display: none; background-color: #4CAF50; color: white; font-weight: bold; padding: 12px 24px; font-size: 16px;">Start Game</button>
-            <button id="backToLoginBtn" class="small-btn">LOGOUT</button>
-        </div>
+    </div>
+    
+    <!-- Netgame view (overlay; hidden until match starts). Placed OUTSIDE the white pair-up box. -->
+    <div id="gameView" class="login-hidden" 
+         style="position:fixed; inset:0; z-index:9999; display:none; background:transparent; 
+                width:100vw; height:100vh; 
+                align-items:center; justify-content:center; flex-direction:column; gap:12px;">
+        <canvas id="netgame" style="display:block; width:100%; height:100%;"></canvas>
     </div>
     <!-- login  -->
     <div class="login-container">
@@ -352,59 +381,23 @@
         </div>
     </div>
     <script src="js/start_game.js"></script>
+    <script src="socket.io/socket.io.js"></script>
     <script src="js/auth.js"></script>
-    <!-- Prototype game scripts -->
-    <!-- Configs -->
-    <script src="prototype/js/config/gameConfig.js"></script>
-    <script src="prototype/js/config/controlsConfig.js"></script>
-    <script src="prototype/js/config/contentConfig.js"></script>
-
-    <!-- Embedded content data -->
+    <script src="js/lobby.js"></script>
+    <script src="js/findRooms.js"></script>
+    <!-- Netgame modules: input capture, simple renderer, and coordination -->
+    <!-- Load prototype content data so the renderer can load images (background, players, guns, powerups) -->
     <script src="prototype/js/assets/GunsData.js"></script>
     <script src="prototype/js/assets/PlayersData.js"></script>
     <script src="prototype/js/assets/MapsData.js"></script>
     <script src="prototype/js/assets/PowerUpsData.js"></script>
-
-    <!-- Content Loaders -->
-    <script src="prototype/js/guns/GunLoader.js"></script>
-    <script src="prototype/js/utils/RegistryLoader.js"></script>
-    <script src="prototype/js/players/PlayerLoader.js"></script>
-    <script src="prototype/js/powerups/PowerUpLoader.js"></script>
-
-    <!-- Core -->
-    <script src="prototype/js/core/Timer.js"></script>
-    <script src="prototype/js/core/StateMachine.js"></script>
-    <script src="prototype/js/core/Renderer.js"></script>
-    <script src="prototype/js/core/Physics.js"></script>
-    <script src="prototype/js/core/Collision.js"></script>
-    <script src="prototype/js/core/Input.js"></script>
-    <script src="prototype/js/core/Game.js"></script>
-
-    <!-- Entities -->
-    <script src="prototype/js/entities/Entity.js"></script>
-    <script src="prototype/js/entities/Platform.js"></script>
-    <script src="prototype/js/powerups/PowerUp.js"></script>
-    <script src="prototype/js/guns/Gun.js"></script>
-    <script src="prototype/js/players/Player.js"></script>
-    <script src="prototype/js/players/PlayerController.js"></script>
-    <script src="prototype/js/entities/Bullet.js"></script>
-
-    <!-- World -->
-    <script src="prototype/js/world/StageLoader.js"></script>
-    <script src="prototype/js/world/Stage.js"></script>
-
-    <!-- UI -->
-    <script src="prototype/js/ui/GameplayUI.js"></script>
-    <script src="prototype/js/ui/GameOverUi.js"></script>
-
-    <!-- States -->
-    <script src="prototype/js/states/CountdownState.js"></script>
-    <script src="prototype/js/states/GameplayState.js"></script>
-    <script src="prototype/js/states/GameOverState.js"></script>
-    <script src="prototype/js/states/BootState.js"></script>
-
-    <!-- Client game renderer (server-authoritative mode) -->
-    <script src="js/client-game-renderer.js"></script>
+    <script src="js/netgame/inputClient.js"></script>
+    <script src="js/netgame/gameRenderer.js"></script>
+    <!-- Netgame states/UI -->
+    <script src="js/netgame/ui/GameOverUI.js"></script>
+    <script src="js/netgame/states/CountdownState.js"></script>
+    <script src="js/netgame/states/GameOverState.js"></script>
+    <script src="js/netgame/main.js"></script>
     <!-- top-right alert trigger and centered alert -->
     <button id="topRightBtn" class="top-right-btn" aria-label="Show alert">?</button>
 

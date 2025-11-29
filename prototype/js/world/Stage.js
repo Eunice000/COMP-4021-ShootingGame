@@ -285,10 +285,13 @@ Stage.prototype._tryFire = function (playerIndex) {
         return;
     }
 
-    // Spawn at the front middle of the player
+    // Spawn near the front middle of the player, slightly inside the body (5px)
     const dir = pl.facing >= 0 ? 1 : -1;
-    const muzzleX = pl.x + (dir > 0 ? pl.w : -w);
-    const muzzleY = pl.y + (pl.h * 0.4);
+    const inset = 5; // move spawn 5px inside the player box
+    const muzzleX = (dir > 0)
+        ? (pl.x + pl.w - inset)
+        : (pl.x - w + inset);
+    const muzzleY = pl.y + (pl.h * 0.5) - (h * 0.5);
 
     const bullet = new window.Bullet({
         x: muzzleX,
