@@ -253,6 +253,39 @@ button:hover {
 .small-btn { padding:8px 12px; font-weight:700; background:var(--accent); color:var(--secondary); border:2px solid var(--primary); cursor:pointer; }
 .created-room, .found-room { margin-top:8px; color:var(--primary); font-weight:700 }
 
+/* Lobby/Room layouts */
+.lobby-view .current-user {
+  margin: 6px 0 16px;
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.button-column { display: flex; flex-direction: column; gap: 12px; }
+/* Match login button color/styles */
+.primary-btn { padding: 12px 16px; font-weight: 800; background: var(--accent); color: var(--secondary); border: 2px solid var(--primary); cursor: pointer; }
+/* Hover behavior same as global button:hover (no background flip) */
+.primary-btn:hover { box-shadow: 4px 4px 0px var(--primary); transform: translate(-2px, -2px); }
+
+.room-view h1 { margin-bottom: 10px; }
+.room-action-row { display: flex; gap: 16px; margin-top: 14px; }
+.room-action-row .primary-btn { flex: 1; }
+
+.player-box {
+  border: 2px solid var(--primary);
+  margin: 12px 0;
+  text-align: left;
+}
+.player-row { display: grid; grid-template-columns: 60px 1fr 150px; align-items: center; border-bottom: 2px solid var(--primary); }
+.player-row:last-child { border-bottom: none; }
+.player-cell { padding: 10px 12px; font-weight: 700; color: var(--primary); }
+.player-role { width: 60px; text-align: center; }
+.status-badge { border: 2px solid var(--primary); padding: 6px 8px; text-align: center; border-radius: 4px; font-weight: 800; white-space: nowrap; min-width: 120px; }
+.status-ready { background: #38c172; color: #fff; }
+.status-waiting { background: #ffc107; color: #000; }
+
+/* Room countdown line under the title */
+.room-countdown { margin: 6px 0 10px; font-weight: 700; color: var(--primary); }
+
 /* Top-right alert button */
 .top-right-btn {
   position: fixed;

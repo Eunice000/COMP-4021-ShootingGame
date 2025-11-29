@@ -10,6 +10,14 @@
   const divider = loginContainer ? loginContainer.querySelector('.divider') : null;
   const footer = loginContainer ? loginContainer.querySelector('.footer') : null;
   const closeBtn = document.getElementById('closeRegisterBtn');
+  // post-login views
+  const pairup = document.getElementById('pairupContainer');
+  const lobbyView = document.getElementById('lobbyView');
+  const roomView = document.getElementById('roomView');
+  const currentUsernameEl = document.getElementById('currentUsername');
+  const logoutBtn = document.getElementById('logoutBtn');
+  const createRoomBtn = document.getElementById('createRoomBtn');
+  const findRoomBtn = document.getElementById('findRoomBtn');
 
   const API_BASE = window.location.origin;
   let mode = 'login'; // or 'register'
@@ -64,8 +72,10 @@
       if (res.ok && data.ok) {
         showMessage('Welcome, ' + data.name + '!');
         currentUser = data.name;
+        // expose globally for other modules (lobby.js)
+        window.CURRENT_USER = currentUser;
+        window.dispatchEvent(new CustomEvent('loginSuccess', { detail: { name: currentUser } }));
         // show pair-up panel (hide login)
-        const pairup = document.getElementById('pairupContainer');
         const login = document.querySelector('.login-container');
         if (login) {
           login.classList.remove('login-visible');
@@ -74,6 +84,11 @@
         if (pairup) {
           pairup.classList.remove('login-hidden');
           pairup.classList.add('login-visible');
+        }
+        if (currentUsernameEl) currentUsernameEl.textContent = 'Current user: ' + currentUser;
+        if (lobbyView && roomView){
+          lobbyView.classList.remove('login-hidden');
+          roomView.classList.add('login-hidden');
         }
       } else {
         showMessage(data.error || 'Login failed');
@@ -101,14 +116,7 @@
     });
   }
 
-  // Pair-up controls
-  const createRoomBtn = document.getElementById('createRoomBtn');
-  const findRoomBtn = document.getElementById('findRoomBtn');
-  const findRoomInput = document.getElementById('findRoomInput');
-  const createdRoom = document.getElementById('createdRoom');
-  const foundRoom = document.getElementById('foundRoom');
-  const backToLoginBtn = document.getElementById('backToLoginBtn');
-  // server-backed rooms
+  // Pair-up controls (server-backed rooms)
 
   if (createRoomBtn) {
     createRoomBtn.addEventListener('click', async function(){
@@ -121,7 +129,14 @@
         });
         const data = await res.json();
         if (res.ok && data.ok) {
-          if (createdRoom) createdRoom.textContent = 'Room created: ' + data.room.id;
+          // switch to room view visually; actual player list populates from socket events
+          if (lobbyView && roomView){
+            lobbyView.classList.add('login-hidden');
+            roomView.classList.remove('login-hidden');
+          }
+          // let lobby.js auto-join via socket
+          // notify lobby to socket-join this room
+          window.dispatchEvent(new CustomEvent('roomCreated', { detail: { id: data.room.id } }));
         } else {
           showMessage(data.error || 'Failed to create room');
         }
@@ -131,34 +146,23 @@
     });
   }
 
+  // Find Room: prompt user for ID then request a join (handled in lobby.js)
   if (findRoomBtn) {
-    findRoomBtn.addEventListener('click', async function(){
-      const want = (findRoomInput && findRoomInput.value || '').trim();
-      if (!want) return showMessage('Enter a room number to find');
-      try{
-        const res = await fetch(API_BASE + '/api/rooms/' + encodeURIComponent(want));
-        if (res.ok) {
-          const data = await res.json();
-          if (data.ok && data.room) {
-            if (foundRoom) foundRoom.textContent = 'Room found: ' + data.room.id + ' (players: ' + (data.room.players||[]).join(', ') + ')';
-          } else {
-            if (foundRoom) foundRoom.textContent = 'Room not found';
-          }
-        } else if (res.status === 404) {
-          if (foundRoom) foundRoom.textContent = 'Room not found';
-        } else {
-          const data = await res.json();
-          showMessage(data.error || 'Error finding room');
-        }
-      } catch(err){
-        showMessage('Unable to find room: ' + err.message);
+    findRoomBtn.addEventListener('click', function(){
+      const want = (window.prompt && window.prompt('Enter Room ID')) || '';
+      const id = (want || '').trim();
+      if (!id) return;
+      if (lobbyView && roomView){
+        lobbyView.classList.add('login-hidden');
+        roomView.classList.remove('login-hidden');
       }
+      window.dispatchEvent(new CustomEvent('roomJoinRequest', { detail: { id } }));
     });
   }
 
-  if (backToLoginBtn) {
-    backToLoginBtn.addEventListener('click', function(){
-      const pairup = document.getElementById('pairupContainer');
+  // Logout: go back to login and notify lobby to leave any room
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', function(){
       const login = document.querySelector('.login-container');
       if (pairup) {
         pairup.classList.remove('login-visible');
@@ -168,6 +172,7 @@
         login.classList.remove('login-hidden');
         login.classList.add('login-visible');
       }
+      window.dispatchEvent(new CustomEvent('userLogout'));
     });
   }
 

@@ -7,30 +7,40 @@
 </head>
 
 <body>
-    <audio id="BackgroundMusic" src="/music/start_game_bgm.mp3"></audio>
+    <audio id="BackgroundMusic" src="music/start_game_bgm.mp3"></audio>
     <!-- start game  -->
-    <p style="background-image: url('/image/start_background.gif');"></p>
+    <p style="background-image: url('image/start_background.gif');"></p>
     <div class="start-game" id="start-game" tabindex="0" role="button" aria-label="Start game">
         <img id="startBtn" src="image/start_button.png" alt="start" height="200">
         <p class="start-caption">Click to Start</p>
     </div>
     <!-- player pair-up panel (hidden until login) -->
     <div class="pairup-container login-hidden" id="pairupContainer">
-        <h1>Player Pair Up</h1>
-        <div class="pairup-actions">
-            <div>
-                <button id="createRoomBtn" class="small-btn">Create Room</button>
-                <div id="createdRoom" class="created-room" aria-live="polite"></div>
-            </div>
-
-            <div>
-                <input type="text" id="findRoomInput" placeholder="Enter room number">
-                <button id="findRoomBtn" class="small-btn">Find Room</button>
-                <div id="foundRoom" class="found-room" aria-live="polite"></div>
+        <!-- Lobby view (post-login before joining/creating a room) -->
+        <div id="lobbyView" class="lobby-view">
+            <h1>Player Pair Up</h1>
+            <div id="currentUsername" class="current-user" aria-live="polite"></div>
+            <div class="button-column">
+                <button id="createRoomBtn" class="primary-btn">Create Room</button>
+                <button id="findRoomBtn" class="primary-btn">Find Room</button>
+                <button id="logoutBtn" class="primary-btn">Logout</button>
             </div>
         </div>
-        <div style="margin-top:12px; display:flex; gap:8px;">
-            <button id="backToLoginBtn" class="small-btn">LOGOUT</button>
+
+        <!-- Room view (shown after create/join) -->
+        <div id="roomView" class="room-view login-hidden" aria-live="polite">
+            <h1 id="roomTitle">Room</h1>
+            <div id="roomCountdown" class="room-countdown" aria-live="polite"></div>
+            <button id="copyRoomIdBtn" class="primary-btn" style="margin-bottom:12px;">Copy Room ID</button>
+
+            <div id="playerBox" class="player-box" role="list">
+                <!-- rows are rendered by lobby.js: P1/P2 | username | ready badge -->
+            </div>
+
+            <div class="room-action-row">
+                <button id="readyBtn" class="primary-btn" disabled>Ready</button>
+                <button id="leaveRoomBtn" class="primary-btn" disabled>Leave</button>
+            </div>
         </div>
     </div>
     <!-- login  -->
@@ -58,7 +68,9 @@
         </div>
     </div>
     <script src="js/start_game.js"></script>
+    <script src="socket.io/socket.io.js"></script>
     <script src="js/auth.js"></script>
+    <script src="js/lobby.js"></script>
     <!-- top-right alert trigger and centered alert -->
     <button id="topRightBtn" class="top-right-btn" aria-label="Show alert">?</button>
 
