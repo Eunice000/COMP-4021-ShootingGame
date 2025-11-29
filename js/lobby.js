@@ -60,6 +60,28 @@
 
       socket.on('errorMsg', ({ error })=>{
         alert(error || 'Error');
+        // If the target room does not exist, return to the Find Rooms screen
+        if (String(error).toLowerCase() === 'room not found'){
+          joinedRoomId = null;
+          isReady = false;
+          if (readyBtn){ readyBtn.disabled = true; readyBtn.textContent = 'Ready'; }
+          if (leaveRoomBtn){ leaveRoomBtn.disabled = true; }
+          if (playerBox){ playerBox.innerHTML = ''; }
+          if (roomCountdown){ roomCountdown.textContent = ''; }
+
+          // Show the search screen again and ask it to refresh
+          const findView = document.getElementById('findRoomsView');
+          if (findView){
+            if (roomView) roomView.classList.add('login-hidden');
+            if (lobbyView) lobbyView.classList.add('login-hidden');
+            findView.classList.remove('login-hidden');
+            // Trigger the findRooms controller to (re)open + refresh
+            window.dispatchEvent(new CustomEvent('findRoomsOpen'));
+          } else {
+            // Fallback to lobby if search screen is not available
+            showLobbyView();
+          }
+        }
       });
     }
     return socket;

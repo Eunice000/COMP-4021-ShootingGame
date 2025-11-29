@@ -28,21 +28,17 @@
         </div>
 
         <!-- Find Rooms view (search + list) -->
-        <div id="findRoomsView" class="login-hidden" aria-live="polite">
+        <div id="findRoomsView" class="login-hidden find-rooms" aria-live="polite">
             <h1>Room</h1>
-            <div style="display:flex; gap:8px; align-items:center; margin:8px 0 12px 0;">
-                <input id="findRoomSearch" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Search room number" 
-                       style="flex:1; padding:8px 10px; font-size:16px;" aria-label="Search room number">
-                <button id="refreshRoomsBtn" class="primary-btn" aria-label="Refresh rooms">Refresh</button>
+            <div class="rooms-toolbar">
+                <input id="findRoomSearch" class="rooms-search" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Search room number" aria-label="Search room number">
+                <button id="refreshRoomsBtn" class="primary-btn rooms-refresh" aria-label="Refresh rooms">Refresh</button>
             </div>
-            <div id="roomsList" role="list" 
-                 style="border:1px solid #ccc; border-radius:6px; padding:4px; max-height:220px; overflow-y:auto;">
+            <div id="roomsList" class="rooms-list" role="list">
                 <!-- Room rows rendered by findRooms.js -->
             </div>
-            <div id="roomsEmpty" style="margin-top:8px; display:none;">No rooms found.</div>
-            <div style="margin-top:12px; display:flex; justify-content:flex-start;">
-                <button id="returnToLobbyBtn" class="primary-btn">Return</button>
-            </div>
+            <div id="roomsEmpty" class="rooms-empty" style="display:none;">No rooms found.</div>
+            <button id="returnToLobbyBtn" class="primary-btn rooms-return">Return</button>
         </div>
 
         <!-- Room view (shown after create/join) -->

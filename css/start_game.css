@@ -329,6 +329,66 @@ button:hover {
 }
 .top-right-btn:hover { transform: translateY(-2px) scale(1.03); }
 
+/* ===== Find Rooms (Search + List) ===== */
+.find-rooms { text-align: left; }
+.rooms-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 6px 0 12px;
+}
+.rooms-search {
+  flex: 1;
+  padding: 12px 14px;
+  border: 2px solid var(--primary);
+  background: var(--secondary);
+  font-size: 16px;
+}
+.rooms-refresh { width: 120px; }
+
+/* Make search bar and Refresh button the same height */
+.rooms-toolbar .rooms-search,
+.rooms-toolbar .rooms-refresh {
+  height: 44px;
+}
+/* Ensure perfect vertical alignment for the Refresh button */
+.rooms-toolbar .rooms-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 0;
+  padding-bottom: 0;
+  margin-top: 0; /* override global button margin */
+}
+
+/* In the toolbar, remove the global top margin from buttons to align with the input */
+.rooms-toolbar .primary-btn { margin-top: 0; }
+
+.rooms-list {
+  border: 2px solid var(--primary);
+  border-radius: 6px;
+  padding: 4px;
+  height: 320px; /* fixed height per requirement */
+  overflow-y: auto;
+  background: var(--secondary);
+}
+.rooms-empty { margin-top: 8px; text-align: center; font-weight: 700; color: var(--primary); }
+.rooms-return { margin-top: 12px; width: 100%; }
+
+.room-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+  border-bottom: 2px solid var(--primary);
+  padding: 10px 8px;
+}
+.room-row:last-child { border-bottom: none; }
+.room-info { display: flex; flex-direction: column; }
+.room-id { font-weight: 800; color: var(--primary); }
+.room-host { font-size: 12px; opacity: .85; color: var(--primary); }
+.room-join { min-width: 96px; }
+
 /* Centered alert box */
 .center-alert {
   position: fixed;
