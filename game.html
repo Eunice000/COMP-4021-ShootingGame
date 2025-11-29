@@ -85,9 +85,10 @@
                 if (isExtensionError(reasonStr) || 
                     (reason && reason.stack && isExtensionError(reason.stack))) {
                     event.preventDefault();
+                    event.stopPropagation();
                     return false;
                 }
-            });
+            }, true);
             
             // 捕獲全局錯誤
             window.addEventListener('error', function(event) {
@@ -285,9 +286,17 @@
         
         function startCountdown() {
             console.log('[game.html] Starting countdown');
+            
+            // Ensure elements exist
+            if (!countdownOverlay || !countdownText) {
+                console.error('[game.html] Countdown elements not found!', { overlay: !!countdownOverlay, text: !!countdownText });
+                return;
+            }
+            
             countdownOverlay.classList.remove('hidden');
             countdownValue = 3;
             countdownText.textContent = countdownValue;
+            console.log('[game.html] Countdown started, showing:', countdownValue);
             
             // Clear any existing interval
             if (countdownInterval) {
@@ -295,43 +304,66 @@
                 countdownInterval = null;
             }
             
-            // Start countdown interval
-            countdownInterval = setInterval(() => {
-                countdownValue--;
-                console.log('[game.html] Countdown value:', countdownValue);
-                
-                if (countdownValue > 0) {
-                    countdownText.textContent = countdownValue;
-                } else if (countdownValue === 0) {
-                    countdownText.textContent = 'GO!';
-                    // Clear interval immediately to prevent further iterations
-                    clearInterval(countdownInterval);
-                    countdownInterval = null;
-                    // Wait one more second before hiding and starting game
-                    setTimeout(() => {
-                        countdownOverlay.classList.add('hidden');
-                        console.log('[game.html] Countdown finished, starting game');
-                        // Ensure game renderer is initialized
-                        if (window.startGame) {
-                            console.log('[game.html] Initializing game renderer...');
-                            window.startGame();
-                        }
-                        // Start the game loop after a short delay to ensure renderer is ready
-                        setTimeout(() => {
-                            if (window.startGameLoop) {
-                                console.log('[game.html] Starting game loop...');
-                                window.startGameLoop();
-                            } else {
-                                console.error('[game.html] window.startGameLoop not available!');
+            // Start countdown interval with error handling
+            try {
+                countdownInterval = setInterval(() => {
+                    try {
+                        countdownValue--;
+                        console.log('[game.html] Countdown value:', countdownValue);
+                        
+                        if (countdownValue > 0) {
+                            countdownText.textContent = countdownValue;
+                        } else if (countdownValue === 0) {
+                            countdownText.textContent = 'GO!';
+                            console.log('[game.html] Countdown reached GO!');
+                            // Clear interval immediately to prevent further iterations
+                            if (countdownInterval) {
+                                clearInterval(countdownInterval);
+                                countdownInterval = null;
                             }
-                        }, 100);
-                    }, 1000);
-                } else {
-                    // countdownValue < 0, should not happen, but clear interval just in case
-                    clearInterval(countdownInterval);
-                    countdownInterval = null;
-                }
-            }, 1000);
+                            // Wait one more second before hiding and starting game
+                            setTimeout(() => {
+                                try {
+                                    countdownOverlay.classList.add('hidden');
+                                    console.log('[game.html] Countdown finished, starting game');
+                                    // Ensure game renderer is initialized
+                                    if (window.startGame) {
+                                        console.log('[game.html] Initializing game renderer...');
+                                        window.startGame();
+                                    }
+                                    // Start the game loop after a short delay to ensure renderer is ready
+                                    setTimeout(() => {
+                                        if (window.startGameLoop) {
+                                            console.log('[game.html] Starting game loop...');
+                                            window.startGameLoop();
+                                        } else {
+                                            console.error('[game.html] window.startGameLoop not available!');
+                                        }
+                                    }, 100);
+                                } catch (err) {
+                                    console.error('[game.html] Error in countdown finish handler:', err);
+                                }
+                            }, 1000);
+                        } else {
+                            // countdownValue < 0, should not happen, but clear interval just in case
+                            console.warn('[game.html] Countdown value went negative:', countdownValue);
+                            if (countdownInterval) {
+                                clearInterval(countdownInterval);
+                                countdownInterval = null;
+                            }
+                        }
+                    } catch (err) {
+                        console.error('[game.html] Error in countdown interval:', err);
+                        if (countdownInterval) {
+                            clearInterval(countdownInterval);
+                            countdownInterval = null;
+                        }
+                    }
+                }, 1000);
+                console.log('[game.html] Countdown interval created');
+            } catch (err) {
+                console.error('[game.html] Error creating countdown interval:', err);
+            }
         }
         
         function stopCountdown() {
@@ -363,6 +395,7 @@
             
             // If game-start was already received, start countdown now
             if (gameStartReceived && !countdownStarted) {
+                console.log('[game.html] Both events received, starting countdown...');
                 countdownStarted = true;
                 startCountdown();
             }
@@ -382,8 +415,13 @@
             
             // Start countdown if player is already assigned and countdown hasn't started
             if (playerAssigned && !countdownStarted) {
+                console.log('[game.html] Both events received, starting countdown...');
                 countdownStarted = true;
                 startCountdown();
+            } else if (!playerAssigned) {
+                console.log('[game.html] Waiting for player assignment before starting countdown...');
+            } else if (countdownStarted) {
+                console.log('[game.html] Countdown already started');
             }
         });
         

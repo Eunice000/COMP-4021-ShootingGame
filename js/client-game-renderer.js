@@ -49,10 +49,15 @@
       if (!assignmentReceived) {
         assignmentReceived = true;
         isPlayer1 = data.playerId === 'p1';
-        console.log('[client-game-renderer] Assigned as', data.playerId);
+        console.log('[client-game-renderer] Assigned as', data.playerId, 'isPlayer1:', isPlayer1);
         if (!gameInitialized) {
           startRenderer();
         }
+        // Setup input handling after assignment - use longer delay to ensure everything is ready
+        setTimeout(() => {
+          console.log('[client-game-renderer] Setting up input handling after player assignment...');
+          setupInputHandling();
+        }, 500);
       }
     });
 
@@ -68,6 +73,15 @@
       if (!gameInitialized) {
         startRenderer();
       }
+      // Ensure input handling is setup
+      setTimeout(() => {
+        if (!window._inputHandlers) {
+          console.log('[client-game-renderer] Setting up input handling after game-start...');
+          setupInputHandling();
+        } else {
+          console.log('[client-game-renderer] Input handlers already exist');
+        }
+      }, 500);
     });
   }
 
@@ -111,7 +125,11 @@
     };
 
     // Set up input handling (only to send to server)
-    setupInputHandling();
+    // Delay to ensure ControlsConfig is loaded and player assignment is complete
+    setTimeout(() => {
+      console.log('[client-game-renderer] Setting up input handling in startRenderer...');
+      setupInputHandling();
+    }, 500);
 
     // Listen for server game state
     socket.on('server-game-state', (state) => {
@@ -187,10 +205,65 @@
     gameStarted = true;
     console.log('[client-game-renderer] Starting game loop');
     game.start();
+    
+    // Ensure input handling is setup after game loop starts
+    setTimeout(() => {
+      console.log('[client-game-renderer] Checking input handling after game loop start...');
+      if (!window._inputHandlers) {
+        console.log('[client-game-renderer] Setting up input handling after game loop start');
+        setupInputHandling();
+      } else {
+        console.log('[client-game-renderer] Input handling already setup, re-setting up to ensure it works');
+        // Re-setup to ensure it's working
+        setupInputHandling();
+      }
+    }, 300);
   }
   
   // Expose function to start game loop after countdown
   window.startGameLoop = startGameLoop;
+  
+  // Expose function to manually test input (for debugging)
+  window.testInput = function() {
+    console.log('[client-game-renderer] Testing input system...');
+    console.log('Socket:', socket ? 'exists' : 'missing', socket ? (socket.connected ? 'connected' : 'disconnected') : '');
+    console.log('Current room ID:', currentRoomId);
+    console.log('Local input:', localInput);
+    console.log('Is Player 1:', isPlayer1);
+    console.log('Input handlers:', window._inputHandlers ? 'exists' : 'missing');
+    console.log('ControlsConfig:', window.ControlsConfig);
+    
+    // Test sending input manually
+    if (socket && currentRoomId && localInput) {
+      const testInput = { left: true, right: false, up: false, down: false, fire: false };
+      console.log('[client-game-renderer] Sending test input:', testInput);
+      socket.emit('player-input', {
+        roomId: currentRoomId,
+        input: {
+          state: testInput,
+          timestamp: Date.now()
+        }
+      });
+      setTimeout(() => {
+        socket.emit('player-input', {
+          roomId: currentRoomId,
+          input: {
+            state: { left: false, right: false, up: false, down: false, fire: false },
+            timestamp: Date.now()
+          }
+        });
+        console.log('[client-game-renderer] Sent test input reset');
+      }, 100);
+    } else {
+      console.error('[client-game-renderer] Cannot send test input - missing requirements');
+    }
+  };
+  
+  // Expose function to manually setup input (for debugging)
+  window.forceSetupInput = function() {
+    console.log('[client-game-renderer] Force setting up input...');
+    setupInputHandling();
+  };
 
   /**
    * Create a render-only gameplay state that uses server state
@@ -226,36 +299,101 @@
    * Set up input handling - only sends to server
    */
   function setupInputHandling() {
-    if (!socket || !currentRoomId) return;
+    if (!socket || !currentRoomId) {
+      console.warn('[client-game-renderer] Cannot setup input: socket or roomId missing', { socket: !!socket, currentRoomId });
+      return;
+    }
+
+    // Remove existing handlers if any to avoid duplicates
+    if (window._inputHandlers) {
+      console.log('[client-game-renderer] Removing existing input handlers');
+      document.removeEventListener('keydown', window._inputHandlers.keydown);
+      document.removeEventListener('keyup', window._inputHandlers.keyup);
+      if (window._inputInterval) {
+        clearInterval(window._inputInterval);
+      }
+    }
 
     const myPlayerId = isPlayer1 ? 'p1' : 'p2';
-    const controlsConfig = window.ControlsConfig || {};
+    console.log('[client-game-renderer] Setting up input for player:', myPlayerId);
+    
+    // Wait for ControlsConfig to be available
+    let controlsConfig = window.ControlsConfig;
+    if (!controlsConfig) {
+      console.warn('[client-game-renderer] ControlsConfig not found, using defaults');
+      // Use default controls if ControlsConfig not loaded
+      controlsConfig = {
+        players: {
+          p1: { left: 'KeyA', right: 'KeyD', up: 'KeyW', down: 'KeyS', fire: 'KeyF' },
+          p2: { left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown', fire: 'KeyZ' }
+        }
+      };
+    }
+    
     const myControls = controlsConfig.players ? controlsConfig.players[myPlayerId] : {};
-    const myKeys = new Set(Object.values(myControls || {}));
+    if (!myControls || Object.keys(myControls).length === 0) {
+      console.error('[client-game-renderer] No controls found for player:', myPlayerId);
+      return;
+    }
+    
+    console.log('[client-game-renderer] Controls for', myPlayerId, ':', myControls);
+    const myKeys = new Set(Object.values(myControls));
 
     // Track key states
     const keyStates = {};
     
-    document.addEventListener('keydown', (e) => {
+    // Create new handlers
+    const keydownHandler = (e) => {
+      // Always log key presses for debugging
       if (myKeys.has(e.code)) {
+        console.log('[client-game-renderer] Key down detected:', e.code, 'for player:', myPlayerId);
+        e.preventDefault();
+        e.stopPropagation();
         keyStates[e.code] = true;
         updateLocalInputFromKeys(keyStates, myControls);
+        console.log('[client-game-renderer] Updated local input:', localInput);
         sendInputToServer();
+      } else {
+        // Log if key is pressed but not in our control set
+        if (window.DEBUG_MULTIPLAYER) {
+          console.log('[client-game-renderer] Key pressed but not in control set:', e.code, 'My keys:', Array.from(myKeys));
+        }
       }
-    });
-
-    document.addEventListener('keyup', (e) => {
+    };
+    
+    const keyupHandler = (e) => {
       if (myKeys.has(e.code)) {
+        console.log('[client-game-renderer] Key up detected:', e.code, 'for player:', myPlayerId);
+        e.preventDefault();
+        e.stopPropagation();
         keyStates[e.code] = false;
         updateLocalInputFromKeys(keyStates, myControls);
+        console.log('[client-game-renderer] Updated local input:', localInput);
         sendInputToServer();
       }
-    });
+    };
+    
+    document.addEventListener('keydown', keydownHandler, true);
+    document.addEventListener('keyup', keyupHandler, true);
+    
+    // Store handlers for cleanup if needed
+    window._inputHandlers = { keydown: keydownHandler, keyup: keyupHandler };
 
-    // Also send periodic input updates
-    setInterval(() => {
-      sendInputToServer();
+    // Also send periodic input updates to ensure server has latest state
+    const inputInterval = setInterval(() => {
+      if (socket && currentRoomId && localInput && socket.connected) {
+        sendInputToServer();
+      } else {
+        if (window.DEBUG_MULTIPLAYER) {
+          console.warn('[client-game-renderer] Cannot send periodic input:', { socket: !!socket, currentRoomId, localInput: !!localInput, connected: socket ? socket.connected : false });
+        }
+      }
     }, 50); // Every 50ms
+    
+    // Store interval for cleanup
+    window._inputInterval = inputInterval;
+    
+    console.log('[client-game-renderer] Input handling setup complete for', myPlayerId);
   }
 
   /**
@@ -273,15 +411,41 @@
    * Send input to server
    */
   function sendInputToServer() {
-    if (!socket || !currentRoomId || !localInput) return;
+    if (!socket || !currentRoomId || !localInput) {
+      if (window.DEBUG_MULTIPLAYER) {
+        console.warn('[client-game-renderer] Cannot send input:', { socket: !!socket, currentRoomId, localInput: !!localInput });
+      }
+      return;
+    }
 
+    if (!socket.connected) {
+      if (window.DEBUG_MULTIPLAYER) {
+        console.warn('[client-game-renderer] Socket not connected, cannot send input');
+      }
+      return;
+    }
+
+    const myPlayerId = isPlayer1 ? 'p1' : 'p2';
+    const inputState = {
+      left: localInput.left || false,
+      right: localInput.right || false,
+      up: localInput.up || false,
+      down: localInput.down || false,
+      fire: localInput.fire || false
+    };
+    
     socket.emit('player-input', {
       roomId: currentRoomId,
       input: {
-        state: { ...localInput },
+        state: inputState,
         timestamp: Date.now()
       }
     });
+    
+    // Always log when there's actual input (not just periodic empty updates)
+    if (inputState.left || inputState.right || inputState.up || inputState.down || inputState.fire) {
+      console.log('[client-game-renderer] Sent input to server:', inputState, 'for player:', myPlayerId);
+    }
   }
 
   /**
