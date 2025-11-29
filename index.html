@@ -16,9 +16,17 @@
             const isExtensionError = (message) => {
                 if (!message) return false;
                 const msg = String(message).toLowerCase();
+                // 檢查所有可能的擴展錯誤模式
                 return msg.includes('message port closed') ||
+                       msg.includes('message port') ||
+                       msg.includes('port closed') ||
                        msg.includes('immersive translate') ||
+                       msg.includes('immersivetranslate') ||
+                       msg.includes('immersive') ||
+                       msg.includes('translate error') ||
                        msg.includes('model not available') ||
+                       msg.includes('unknownerror') ||
+                       msg.includes('unknown error') ||
                        msg.includes('sync rules error') ||
                        msg.includes('request timeout') ||
                        msg.includes('failed to fetch') ||
@@ -27,9 +35,18 @@
                        msg.includes('run cron task failed') ||
                        msg.includes('content_script.js') ||
                        msg.includes('content-script.js') ||
+                       msg.includes('content.js') ||
+                       msg.includes('content_script') ||
                        msg.includes('assets.immersivetranslate.cn') ||
                        msg.includes('analytics: sent') ||
-                       (msg.includes('404') && msg.includes('immersivetranslate'));
+                       msg.includes('analytics event') ||
+                       msg.includes('analytics') ||
+                       (msg.includes('404') && msg.includes('immersivetranslate')) ||
+                       msg.includes('chrome-extension://') ||
+                       msg.includes('moz-extension://') ||
+                       msg.includes('safari-extension://') ||
+                       // 檢查文件名模式
+                       (msg.includes('error') && (msg.includes('content_script') || msg.includes('immersive')));
             };
             
             // 過濾 Immersive Translate 和 message port 相關錯誤
@@ -39,13 +56,30 @@
                 // 檢查所有參數
                 for (let i = 0; i < args.length; i++) {
                     const arg = args[i];
-                    if (isExtensionError(arg) || 
-                        (arg && typeof arg === 'object' && (
-                            isExtensionError(arg.message) ||
-                            isExtensionError(arg.toString()) ||
-                            (arg.stack && isExtensionError(arg.stack))
-                        ))) {
+                    // 直接檢查參數
+                    if (isExtensionError(arg)) {
                         return true;
+                    }
+                    // 檢查對象屬性
+                    if (arg && typeof arg === 'object') {
+                        if (arg.message && isExtensionError(arg.message)) {
+                            return true;
+                        }
+                        if (arg.toString && isExtensionError(arg.toString())) {
+                            return true;
+                        }
+                        if (arg.stack && isExtensionError(arg.stack)) {
+                            return true;
+                        }
+                        if (arg.name && isExtensionError(arg.name)) {
+                            return true;
+                        }
+                        // 檢查對象的所有字符串屬性
+                        for (const key in arg) {
+                            if (typeof arg[key] === 'string' && isExtensionError(arg[key])) {
+                                return true;
+                            }
+                        }
                     }
                 }
                 return false;
@@ -74,30 +108,66 @@
             window.addEventListener('unhandledrejection', function(event) {
                 const reason = event.reason;
                 let reasonStr = '';
+                let shouldSuppress = false;
                 
+                // 檢查多種形式的錯誤訊息
                 if (typeof reason === 'string') {
                     reasonStr = reason;
-                } else if (reason && reason.message) {
-                    reasonStr = reason.message;
-                } else if (reason && reason.toString) {
-                    reasonStr = reason.toString();
+                    shouldSuppress = isExtensionError(reasonStr);
+                } else if (reason) {
+                    // 檢查 Error 對象
+                    if (reason.message) {
+                        reasonStr = reason.message;
+                        shouldSuppress = isExtensionError(reasonStr);
+                    }
+                    if (!shouldSuppress && reason.toString) {
+                        reasonStr = reason.toString();
+                        shouldSuppress = isExtensionError(reasonStr);
+                    }
+                    if (!shouldSuppress && reason.stack) {
+                        shouldSuppress = isExtensionError(reason.stack);
+                    }
+                    // 檢查錯誤名稱
+                    if (!shouldSuppress && reason.name) {
+                        shouldSuppress = isExtensionError(reason.name);
+                    }
                 }
                 
-                if (isExtensionError(reasonStr) || 
-                    (reason && reason.stack && isExtensionError(reason.stack))) {
+                if (shouldSuppress) {
                     event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation();
                     return false;
                 }
-            });
+            }, true);
             
             // 捕獲全局錯誤
             window.addEventListener('error', function(event) {
+                let shouldSuppress = false;
+                
                 if (event.message && isExtensionError(event.message)) {
-                    event.preventDefault();
-                    return false;
+                    shouldSuppress = true;
                 }
-                if (event.filename && isExtensionError(event.filename)) {
+                if (!shouldSuppress && event.filename && isExtensionError(event.filename)) {
+                    shouldSuppress = true;
+                }
+                if (!shouldSuppress && event.error) {
+                    const error = event.error;
+                    if (error.message && isExtensionError(error.message)) {
+                        shouldSuppress = true;
+                    }
+                    if (!shouldSuppress && error.stack && isExtensionError(error.stack)) {
+                        shouldSuppress = true;
+                    }
+                    if (!shouldSuppress && error.name && isExtensionError(error.name)) {
+                        shouldSuppress = true;
+                    }
+                }
+                
+                if (shouldSuppress) {
                     event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation();
                     return false;
                 }
             }, true);
