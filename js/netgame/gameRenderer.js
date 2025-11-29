@@ -2,6 +2,10 @@
 (function(){
   const WORLD_W = 1920;
   const WORLD_H = 1080;
+  // Border styling around the world view
+  const BORDER_SCALE = 0.010; // fraction of min(canvasWidth, canvasHeight) — halved
+  const BORDER_MIN = 7;       // minimum border thickness in pixels — halved
+  const RADIUS_CAP = 32;      // maximum corner radius in pixels
 
   function GameRenderer(canvas){
     this.canvas = canvas;
@@ -20,6 +24,19 @@
     this._initAssets();
     // Game over overlay model
     this.gameOver = null; // { winner:number|null, stats:{p1:{kills,deaths,pickups},p2:{...}} }
+  }
+
+  function roundedRectPath(ctx, x, y, w, h, r){
+    const rr = Math.max(0, Math.min(r, Math.min(w, h) * 0.5));
+    ctx.moveTo(x + rr, y);
+    ctx.lineTo(x + w - rr, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+    ctx.lineTo(x + w, y + h - rr);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+    ctx.lineTo(x + rr, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+    ctx.lineTo(x, y + rr);
+    ctx.quadraticCurveTo(x, y, x + rr, y);
   }
 
   GameRenderer.prototype.setSnapshot = function(snap){
@@ -62,19 +79,42 @@
     ctx.setTransform(1,0,0,1,0,0);
     ctx.clearRect(0,0,cw,ch);
 
-    // Background bars (optional): fill with black outside world
+    // Do not draw opaque letterbox bars; keep outside area transparent so the page background shows through
+
+    // Draw a black border: outer rounded-rect ring around the world rectangle
+    // Compute world rectangle in screen space
+    const border = Math.max(BORDER_MIN, Math.floor(Math.min(cw, ch) * BORDER_SCALE));
+    const radius = Math.min(RADIUS_CAP, Math.floor(border * 2));
+    const outerX = offX - border;
+    const outerY = offY - border;
+    const outerW = drawW + border * 2;
+    const outerH = drawH + border * 2;
+    ctx.save();
     ctx.fillStyle = '#000';
-    // top bar
-    if (offY > 0) ctx.fillRect(0, 0, cw, offY);
-    // bottom bar
-    if (offY > 0) ctx.fillRect(0, offY + drawH, cw, ch - (offY + drawH));
-    // left bar
-    if (offX > 0) ctx.fillRect(0, 0, offX, ch);
-    // right bar
-    if (offX > 0) ctx.fillRect(offX + drawW, 0, cw - (offX + drawW), ch);
+    ctx.beginPath();
+    roundedRectPath(ctx, outerX, outerY, outerW, outerH, radius);
+    // Cut out the inner (world) rectangle so only the ring remains
+    ctx.rect(offX, offY, drawW, drawH);
+    try {
+      ctx.fill('evenodd');
+    } catch(e) {
+      // Fallback if evenodd is unsupported: draw outer, then punch inner with composite
+      ctx.save();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fill();
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillRect(offX, offY, drawW, drawH);
+      ctx.restore();
+    }
+    ctx.restore();
 
     // Transform to world space centered
     ctx.setTransform(scale, 0, 0, scale, offX, offY);
+    // Clip all world rendering strictly to the world rectangle so nothing draws outside
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, WORLD_W, WORLD_H);
+    ctx.clip();
 
     // World background (use snapshot background if provided)
     const snap = this.latest;
@@ -205,6 +245,9 @@
         }
       }
     }
+
+    // Remove world clip before drawing UI/overlays in screen space
+    ctx.restore();
 
     // UI in screen space: time left top-center
     ctx.setTransform(1,0,0,1,0,0);

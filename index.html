@@ -46,10 +46,10 @@
     
     <!-- Netgame view (overlay; hidden until match starts). Placed OUTSIDE the white pair-up box. -->
     <div id="gameView" class="login-hidden" 
-         style="position:fixed; inset:0; z-index:9999; display:none; background:#000; 
+         style="position:fixed; inset:0; z-index:9999; display:none; background:transparent; 
                 width:100vw; height:100vh; 
                 align-items:center; justify-content:center; flex-direction:column; gap:12px;">
-        <canvas id="netgame" style="display:block; background:#000; width:100%; height:100%;"></canvas>
+        <canvas id="netgame" style="display:block; width:100%; height:100%;"></canvas>
     </div>
     <!-- login  -->
     <div class="login-container">
@@ -87,6 +87,10 @@
     <script src="prototype/js/assets/PowerUpsData.js"></script>
     <script src="js/netgame/inputClient.js"></script>
     <script src="js/netgame/gameRenderer.js"></script>
+    <!-- Netgame states/UI -->
+    <script src="js/netgame/ui/GameOverUI.js"></script>
+    <script src="js/netgame/states/CountdownState.js"></script>
+    <script src="js/netgame/states/GameOverState.js"></script>
     <script src="js/netgame/main.js"></script>
     <!-- top-right alert trigger and centered alert -->
     <button id="topRightBtn" class="top-right-btn" aria-label="Show alert">?</button>

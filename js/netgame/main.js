@@ -19,6 +19,11 @@
   /** @type {null | { start:()=>void, stop:()=>void, setSnapshot:(snap:any)=>void }} */
   let renderer = null;
   let role = null;
+  // Lightweight states/overlays
+  /** @type {any} */
+  let countdown = null; // NetCountdownState instance
+  /** @type {any} */
+  let gameOverState = null; // NetGameOverState instance
 
   // Views
   const roomView = document.getElementById('roomView');
@@ -31,10 +36,17 @@
   function resizeCanvasToViewport(){
     if (!canvas) return;
     const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-    const cssW = window.innerWidth;
-    const cssH = window.innerHeight;
+
+    // Fill the entire viewport with the canvas. The renderer will letterbox
+    // the fixed 1920x1080 world inside this area and draw the border around it.
+    const cssW = Math.max(1, Math.floor(window.innerWidth));
+    const cssH = Math.max(1, Math.floor(window.innerHeight));
+
+    // Set CSS size to match the viewport
     canvas.style.width = cssW + 'px';
     canvas.style.height = cssH + 'px';
+
+    // Match backing store to CSS size * DPR for crisp rendering
     const bw = Math.floor(cssW * dpr);
     const bh = Math.floor(cssH * dpr);
     if (canvas.width !== bw || canvas.height !== bh){
@@ -107,18 +119,44 @@
       showGame();
       startRenderer();
       startInputLoop();
+      // Optional local start countdown overlay
+      try {
+        const CDS = window['NetCountdownState'];
+        if (CDS && gameView){
+          countdown = new CDS(gameView);
+          countdown.start(3);
+        }
+      } catch(e){}
     });
     socket.on('snapshot', (snap)=>{
       if (renderer) renderer.setSnapshot(snap);
     });
-    socket.on('gameOver', ()=>{
+    socket.on('gameOver', (payload)=>{
+      // Stop input immediately to prevent further actions
       stopInputLoop();
+      // Show a Game Over overlay for a short time before returning
+      try {
+        const GOS = window['NetGameOverState'];
+        if (renderer && GOS){
+          gameOverState = new GOS(renderer);
+          gameOverState.enter(payload||{}, 3000, ()=>{
+            stopRenderer();
+            showRoom();
+            gameOverState = null;
+          });
+          return;
+        }
+      } catch(e){}
+      // Fallback: no UI class available → cleanup immediately
       stopRenderer();
-      // Return to room view automatically
       showRoom();
     });
     socket.on('forceLeave', ()=>{
       // In case forceLeave is emitted from other flows, ensure cleanup
+      try { if (countdown && countdown.stop) countdown.stop(); } catch(e){}
+      countdown = null;
+      try { if (gameOverState && gameOverState.exit) gameOverState.exit(); } catch(e){}
+      gameOverState = null;
       stopInputLoop();
       stopRenderer();
       showRoom();
@@ -136,6 +174,10 @@
       /** @type {SimpleSocket|null} */
       const socket = getSocket();
       if (socket) socket.emit('leaveRoom');
+      try { if (countdown && countdown.stop) countdown.stop(); } catch(e){}
+      countdown = null;
+      try { if (gameOverState && gameOverState.exit) gameOverState.exit(); } catch(e){}
+      gameOverState = null;
       stopInputLoop();
       stopRenderer();
       showRoom();
