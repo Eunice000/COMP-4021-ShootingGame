@@ -595,56 +595,6 @@ button:hover {
 
 }
 
-.muteSoundBtn {
-
-  position: fixed;
-
-  top: 12px;
-
-  right: 60px;
-
-  z-index: 1200;
-
-  background: var(--accent);
-
-  color: var(--secondary);
-
-  border: 2px solid var(--primary);
-
-  width: 40px;
-
-  height: 40px;
-
-  padding: 0;
-  /* no extra horizontal padding */
-
-  display: inline-flex;
-
-  align-items: center;
-
-  justify-content: center;
-
-  font-size: 18px;
-  /* keep icon readable */
-
-  line-height: 1;
-
-  border-radius: 50%;
-  /* circular */
-
-  font-weight: 700;
-
-  cursor: pointer;
-
-  box-shadow: var(--shadow);
-
-  transition: transform 0.12s ease, background 0.12s ease;
-
-}
-
-.muteSoundBtn:hover {
-  transform: translateY(-2px) scale(1.03);
-}
 
 /* Modal Backdrop */
 .modal-overlay {
