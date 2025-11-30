@@ -13,7 +13,7 @@
             sprite: "prototype/assets/game/guns/pistol_sprite.png",
             // Align the grip top slightly below mid-height (renderer uses anchorGripTop)
             anchorGripTop: 16, // source image is 48px tall; grip top ~16px from top
-            offset: {x: 10, y: 0}
+            offset: {x: 50, y: 0}
         },
         {
             id: 2,
@@ -26,7 +26,7 @@
             ammo: 4,
             sprite: "prototype/assets/game/guns/sniper_sprite.png",
             anchorGripTop: 14, // image height ~32px; grip top around 14px
-            offset: {x: 60, y: 0}
+            offset: {x: 100, y: 0}
         },
         {
             id: 3,
@@ -39,7 +39,7 @@
             ammo: 24,
             sprite: "prototype/assets/game/guns/ar_sprite.png",
             anchorGripTop: 22, // image height 48px; grip top near 22px
-            offset: {x: 30, y: 0}
+            offset: {x: 100, y: 30}
         },
         {
             id: 4,
@@ -52,7 +52,7 @@
             ammo: 32,
             sprite: "prototype/assets/game/guns/smg_sprite.png",
             anchorGripTop: 22, // image height 48px; grip top near 22px
-            offset: {x: 10, y: 0}
+            offset: {x: 60, y: 30}
         }
     ];
     window.GameData = window.GameData || {};
